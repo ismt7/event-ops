@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: "/ismt7",
+  basePath: "/event-ops",
   output: "export",
   images: { unoptimized: true },
 };
