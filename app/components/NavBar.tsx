@@ -5,7 +5,9 @@ const NavBar: React.FC = () => {
     <nav className="bg-gradient-to-r from-blue-500 to-purple-500 p-4 shadow-md">
       <div className="container mx-auto">
         <div className="flex items-center justify-between">
-          <div className="text-white text-lg font-bold">Event Ops</div>
+          <Link href="/" className="text-white text-lg font-bold">
+            Event Ops
+          </Link>
           <div>
             <Link
               href="/"
