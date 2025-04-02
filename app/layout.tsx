@@ -1,11 +1,12 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
+import NavBar from "./components/NavBar";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "イベント管理",
-  description: "イベント管理アプリケーション",
+  title: "Event Ops",
+  description: "イベント運営を支援するアプリ",
 };
 
 export default function RootLayout({
@@ -15,7 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <NavBar />
+        {children}
+      </body>
     </html>
   );
 }
