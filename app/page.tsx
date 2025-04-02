@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ChangeEvent, FormEvent, MouseEvent } from "react";
+import { useState, useEffect, ChangeEvent, MouseEvent } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ja";
 import defaultConfig from "@/event-ops.config";
@@ -25,15 +25,11 @@ const validateUrl = (url: string, domain: string) => {
 };
 
 const handleUrlChange =
-  (
-    setUrl: React.Dispatch<React.SetStateAction<string>>,
-    setUrlValid: React.Dispatch<React.SetStateAction<boolean>>,
-    domain: string
-  ) =>
+  (setUrl: React.Dispatch<React.SetStateAction<string>>, domain: string) =>
   (e: ChangeEvent<HTMLInputElement>) => {
     const url = e.target.value;
     setUrl(url);
-    setUrlValid(validateUrl(url, domain));
+    validateUrl(url, domain); // バリデーションは実行するが結果は利用しない
   };
 
 interface TabProps {
@@ -68,16 +64,6 @@ interface Template {
   text: string;
 }
 
-const insertAtCursor = (input: HTMLTextAreaElement, text: string) => {
-  const start = input.selectionStart;
-  const end = input.selectionEnd;
-  const before = input.value.substring(0, start);
-  const after = input.value.substring(end);
-  input.value = before + text + after;
-  input.selectionStart = input.selectionEnd = start + text.length;
-  input.focus();
-};
-
 export default function Home() {
   const [config, setConfig] = useState(defaultConfig);
   const [zoomUrl, setZoomUrl] = useState("");
@@ -96,12 +82,6 @@ export default function Home() {
   const [templateText, setTemplateText] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [activeTab, setActiveTab] = useState("編集");
-
-  const [zoomUrlValid, setZoomUrlValid] = useState(true);
-  const [youtubeUrlValid, setYoutubeUrlValid] = useState(true);
-  const [surveyUrlValid, setSurveyUrlValid] = useState(true);
-  const [slidoUrlValid, setSlidoUrlValid] = useState(true);
-  const [connpassUrlValid, setConnpassUrlValid] = useState(true);
 
   useEffect(() => {
     // 初回起動時にdefaultConfigをstorageに保存
@@ -168,13 +148,6 @@ export default function Home() {
   useEffect(() => {
     storage.setItem("templates", templates);
   }, [templates]);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-
-    setMessage("保存が完了しました！");
-    setTimeout(() => setMessage(""), 3000);
-  };
 
   const handleClear = () => {
     storage.clear();
@@ -266,7 +239,7 @@ export default function Home() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = (event: ProgressEvent<FileReader>) => {
       try {
         const importedData = JSON.parse(event.target?.result as string);
 
@@ -316,7 +289,7 @@ export default function Home() {
 
         setMessage("JSONファイルをインポートしました！");
         setTimeout(() => setMessage(""), 3000);
-      } catch (error) {
+      } catch {
         alert("JSONファイルの読み込みに失敗しました。");
       }
     };
@@ -392,41 +365,25 @@ export default function Home() {
               label="Zoom URL"
               id="zoomUrl"
               value={zoomUrl}
-              onChange={handleUrlChange(
-                setZoomUrl,
-                setZoomUrlValid,
-                "us06web.zoom.us"
-              )}
+              onChange={handleUrlChange(setZoomUrl, "us06web.zoom.us")}
             />
             <UrlForm
               label="YouTube URL"
               id="youtubeUrl"
               value={youtubeUrl}
-              onChange={handleUrlChange(
-                setYoutubeUrl,
-                setYoutubeUrlValid,
-                "www.youtube.com"
-              )}
+              onChange={handleUrlChange(setYoutubeUrl, "www.youtube.com")}
             />
             <UrlForm
               label="Survey URL"
               id="surveyUrl"
               value={surveyUrl}
-              onChange={handleUrlChange(
-                setSurveyUrl,
-                setSurveyUrlValid,
-                "docs.google.com"
-              )}
+              onChange={handleUrlChange(setSurveyUrl, "docs.google.com")}
             />
             <UrlForm
               label="Slido URL"
               id="slidoUrl"
               value={slidoUrl}
-              onChange={handleUrlChange(
-                setSlidoUrl,
-                setSlidoUrlValid,
-                "app.sli.do"
-              )}
+              onChange={handleUrlChange(setSlidoUrl, "app.sli.do")}
             />
             <UrlForm
               label="connpass URL"
@@ -434,18 +391,11 @@ export default function Home() {
               value={connpassUrl}
               onChange={handleUrlChange(
                 setConnpassUrl,
-                setConnpassUrlValid,
                 config.connpass.baseUrl
               )}
             />
           </div>
           <div className="flex flex-wrap gap-4 mt-6 justify-center">
-            <button
-              type="submit"
-              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded shadow-md transition"
-            >
-              保存
-            </button>
             <button
               type="button"
               onClick={handleClear}

@@ -10,23 +10,32 @@ import {
   clearLocalStorage,
 } from "./utils/storage";
 
+interface Question {
+  id: string;
+  title: string;
+  content: string;
+  answer: string;
+}
+
 export default function EventReportPage() {
   const [reportTitle, setReportTitle] = useState("");
   const [leadText, setLeadText] = useState("");
   const [seminarVideoUrl, setSeminarVideoUrl] = useState("");
   const [presentationUrl, setPresentationUrl] = useState("");
-  const [questions, setQuestions] = useState([
-    { id: uuidv4(), title: "", content: "", answer: "" }, // 修正: idをUUIDに変更
+  const [questions, setQuestions] = useState<Question[]>([
+    { id: uuidv4(), title: "", content: "", answer: "" },
   ]);
-  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null); // 修正: 型をstring | nullに変更
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isLeadTextModalOpen, setIsLeadTextModalOpen] = useState(false);
 
   useEffect(() => {
-    const savedReportTitle = loadFromLocalStorage("reportTitle");
-    const savedLeadText = loadFromLocalStorage("leadText");
-    const savedSeminarVideoUrl = loadFromLocalStorage("seminarVideoUrl");
-    const savedPresentationUrl = loadFromLocalStorage("presentationUrl");
-    const savedQuestions = loadFromLocalStorage("questions");
+    const savedReportTitle = loadFromLocalStorage<string>("reportTitle");
+    const savedLeadText = loadFromLocalStorage<string>("leadText");
+    const savedSeminarVideoUrl =
+      loadFromLocalStorage<string>("seminarVideoUrl");
+    const savedPresentationUrl =
+      loadFromLocalStorage<string>("presentationUrl");
+    const savedQuestions = loadFromLocalStorage<Question[]>("questions");
 
     if (savedReportTitle) setReportTitle(savedReportTitle);
     if (savedLeadText) setLeadText(savedLeadText);
@@ -56,13 +65,13 @@ export default function EventReportPage() {
     setLeadText("");
     setSeminarVideoUrl("");
     setPresentationUrl("");
-    setQuestions([{ id: uuidv4(), title: "", content: "", answer: "" }]); // 修正: idをUUIDに変更
+    setQuestions([{ id: uuidv4(), title: "", content: "", answer: "" }]);
     setActiveQuestionId(null);
     alert("データをクリアしました！");
   };
 
   const handleAddQuestion = () => {
-    const newId = uuidv4(); // 修正: UUIDを使用して一意のIDを生成
+    const newId = uuidv4();
     setQuestions([
       ...questions,
       { id: newId, title: "", content: "", answer: "" },
