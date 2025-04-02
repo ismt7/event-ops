@@ -13,6 +13,7 @@ import ReadOnlyPasscode from "@/app/components/ReadOnlyPasscode";
 import TemplateEditor from "@/app/components/TemplateEditor";
 import { saveAs } from "file-saver";
 import { storage } from "@/lib/storage";
+import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 dayjs.locale("ja");
 
 const validateUrl = (url: string, domain: string) => {
@@ -64,6 +65,12 @@ interface Template {
   text: string;
 }
 
+interface Link {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export default function Home() {
   const [config, setConfig] = useState(defaultConfig);
   const [zoomUrl, setZoomUrl] = useState("");
@@ -82,6 +89,10 @@ export default function Home() {
   const [templateText, setTemplateText] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [activeTab, setActiveTab] = useState("編集");
+  const [links, setLinks] = useState<Link[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newLinkName, setNewLinkName] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
 
   useEffect(() => {
     // 初回起動時にdefaultConfigをstorageに保存
@@ -101,6 +112,7 @@ export default function Home() {
     const storedEventTitle = storage.getItem<string>("eventTitle");
     const storedEventDescription = storage.getItem<string>("eventDescription");
     const storedTemplates = storage.getItem<Template[]>("templates");
+    const storedLinks = storage.getItem<Link[]>("links");
 
     if (storedZoomUrl) setZoomUrl(storedZoomUrl);
     if (storedYoutubeUrl) setYoutubeUrl(storedYoutubeUrl);
@@ -111,6 +123,7 @@ export default function Home() {
     if (storedEventTitle) setEventTitle(storedEventTitle);
     if (storedEventDescription) setEventDescription(storedEventDescription);
     if (storedTemplates) setTemplates(storedTemplates);
+    if (storedLinks) setLinks(storedLinks);
   }, []);
 
   useEffect(() => {
@@ -149,6 +162,10 @@ export default function Home() {
     storage.setItem("templates", templates);
   }, [templates]);
 
+  useEffect(() => {
+    storage.setItem("links", links);
+  }, [links]);
+
   const handleClear = () => {
     storage.clear();
     setZoomUrl("");
@@ -160,6 +177,7 @@ export default function Home() {
     setEventTitle("");
     setEventDescription("");
     setTemplateText("");
+    setLinks([]);
     setMessage("ローカルストレージをクリアしました！");
     setTimeout(() => setMessage(""), 3000);
   };
@@ -209,6 +227,24 @@ export default function Home() {
     }
   };
 
+  const handleAddLink = () => {
+    if (newLinkName && newLinkUrl) {
+      const newLink = {
+        id: dayjs().format("YYYYMMDDHHmmss"),
+        name: newLinkName,
+        url: newLinkUrl,
+      };
+      setLinks((prevLinks) => [...prevLinks, newLink]);
+      setNewLinkName("");
+      setNewLinkUrl("");
+      setIsModalOpen(false);
+    }
+  };
+
+  const handleDeleteLink = (id: string) => {
+    setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
+  };
+
   const handleExport = () => {
     const storedConfig = storage.getItem<typeof config>("config");
     const currentConfig = storedConfig || defaultConfig;
@@ -224,6 +260,7 @@ export default function Home() {
       eventTitle,
       eventDescription,
       templates,
+      links,
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -269,6 +306,7 @@ export default function Home() {
         setEventTitle(importedData.eventTitle || "");
         setEventDescription(importedData.eventDescription || "");
         setTemplates(importedData.templates || []);
+        setLinks(importedData.links || []);
 
         // 他の値もローカルストレージを更新
         storage.setItem("zoomUrl", importedData.zoomUrl || "");
@@ -286,6 +324,7 @@ export default function Home() {
           importedData.eventDescription || ""
         );
         storage.setItem("templates", importedData.templates || []);
+        storage.setItem("links", importedData.links || []);
 
         setMessage("JSONファイルをインポートしました！");
         setTimeout(() => setMessage(""), 3000);
@@ -329,6 +368,81 @@ export default function Home() {
   return (
     <div className="bg-gray-100 min-h-screen">
       <div className="container mx-auto px-4 py-6">
+        {/* リンクセクション */}
+        <div className="bg-white shadow-md rounded-lg p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">リンク</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {links.map((link) => (
+              <div
+                key={link.id}
+                className="flex items-center justify-between p-4 border rounded bg-gray-50"
+              >
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  {link.name}
+                </a>
+                <button
+                  onClick={() => handleDeleteLink(link.id)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center justify-center p-4 border-2 border-dashed rounded text-gray-500 hover:text-gray-700 hover:border-gray-700"
+            >
+              <PlusCircleIcon className="h-6 w-6 mr-2" />
+              リンクを追加
+            </button>
+          </div>
+        </div>
+
+        {/* モーダル */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+              <h2 className="text-lg font-bold mb-4">リンクを追加</h2>
+              <div className="mb-4">
+                <TextInputForm
+                  label="リンク名"
+                  id="linkName"
+                  value={newLinkName}
+                  onChange={(e) => setNewLinkName(e.target.value)}
+                />
+              </div>
+              <div className="mb-4">
+                <TextInputForm
+                  label="リンクURL"
+                  id="linkUrl"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mr-2"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleAddLink}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                >
+                  追加
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* イベント設定セクション */}
         <div className="bg-white shadow-md rounded-lg p-6">
           <h1 className="text-2xl font-bold text-gray-800 mb-6">
             イベント設定
@@ -395,6 +509,31 @@ export default function Home() {
               )}
             />
           </div>
+          <div className="bg-gray-50 shadow-inner rounded-lg p-6 mt-8">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              生成されたリンク
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <ReadOnlyUrl label="Zoom URL(短縮)" value={formattedZoomUrl} />
+              <ReadOnlyPasscode
+                label="Zoom パスコード"
+                value={formattedZoomPasscode}
+              />
+              <ReadOnlyUrl
+                label="YouTube URL(短縮)"
+                value={formattedYoutubeUrl}
+              />
+              <ReadOnlyUrl label="Slido URL(短縮)" value={formattedSlidoUrl} />
+              <ReadOnlyPasscode
+                label="Slido イベントコード"
+                value={formattedSlidoEventCode}
+              />
+              <ReadOnlyUrl
+                label="アンケート URL(短縮)"
+                value={formattedSurveyUrl}
+              />
+            </div>
+          </div>
           <div className="flex flex-wrap gap-4 mt-6 justify-center">
             <button
               type="button"
@@ -426,31 +565,6 @@ export default function Home() {
             {message}
           </p>
         )}
-        <div className="bg-white shadow-md rounded-lg p-6 mt-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            生成されたリンク
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <ReadOnlyUrl label="Zoom URL(短縮)" value={formattedZoomUrl} />
-            <ReadOnlyPasscode
-              label="Zoom パスコード"
-              value={formattedZoomPasscode}
-            />
-            <ReadOnlyUrl
-              label="YouTube URL(短縮)"
-              value={formattedYoutubeUrl}
-            />
-            <ReadOnlyUrl label="Slido URL(短縮)" value={formattedSlidoUrl} />
-            <ReadOnlyPasscode
-              label="Slido イベントコード"
-              value={formattedSlidoEventCode}
-            />
-            <ReadOnlyUrl
-              label="アンケート URL(短縮)"
-              value={formattedSurveyUrl}
-            />
-          </div>
-        </div>
         <div className="bg-white shadow-md rounded-lg p-6 mt-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
             テンプレート管理
