@@ -44,7 +44,9 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
     const inputValue = e.target.value;
     onChange(inputValue);
 
-    const lastWord = inputValue.split(" ").pop() || "";
+    // 改行を考慮して最後の単語を取得
+    const lastWord =
+      inputValue.slice(0, e.target.selectionStart).split(/\s+/).pop() || "";
     if (lastWord.startsWith("{")) {
       const matches = suggestions.filter((s) => s.key.startsWith(lastWord));
       setFilteredSuggestions(matches);
@@ -130,7 +132,10 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
     div.style.wordWrap = "break-word";
     div.style.width = `${textarea.offsetWidth}px`;
 
-    const text = textarea.value.substring(0, position);
+    // 改行を正確に反映させるためにテキストを加工
+    const text = textarea.value
+      .substring(0, position)
+      .replace(/\n/g, "\u200b\n");
     div.textContent = text;
 
     const span = document.createElement("span");
@@ -139,10 +144,14 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
 
     document.body.appendChild(div);
 
+    // テキストエリアのスクロール位置を考慮
     const { offsetTop: top, offsetLeft: left } = span;
+    const scrollTop = textarea.scrollTop;
+    const scrollLeft = textarea.scrollLeft;
+
     document.body.removeChild(div);
 
-    return { top, left };
+    return { top: top - scrollTop, left: left - scrollLeft };
   };
 
   return (
