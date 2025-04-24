@@ -16,6 +16,7 @@ export default function Settings() {
       setConfig((prevConfig) => ({
         ...prevConfig,
         ...storedConfig,
+        prefix: storedConfig.prefix || prevConfig.prefix,
         shortUrl: {
           ...prevConfig.shortUrl,
           ...storedConfig.shortUrl,
