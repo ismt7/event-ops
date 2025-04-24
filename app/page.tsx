@@ -99,6 +99,8 @@ export default function Home() {
     const storedConfig = storage.getItem<typeof config>("config");
     if (!storedConfig) {
       storage.setItem("config", defaultConfig);
+    } else {
+      setConfig(storedConfig); // ローカルストレージから読み込んだconfigをセット
     }
   }, []);
 
@@ -292,6 +294,7 @@ export default function Home() {
             ...defaultConfig.connpass,
             ...importedData.config?.connpass,
           },
+          prefix: importedData.config?.prefix || defaultConfig.prefix,
         };
 
         setConfig(newConfig);
@@ -336,12 +339,12 @@ export default function Home() {
   };
 
   const formattedDate = dayjs(eventDate).format("YYYYMM");
-  const formattedZoomUrl = `${config.shortUrl.baseUrl}/${config.prefix}${formattedDate}-zoom`;
-  const formattedYoutubeUrl = `${config.shortUrl.baseUrl}/${config.prefix}${formattedDate}-youtube`;
-  const formattedSurveyUrl = `${config.shortUrl.baseUrl}/${config.prefix}${formattedDate}-survey`;
-  const formattedSlidoUrl = `${config.shortUrl.baseUrl}/${config.prefix}${formattedDate}-slido`;
-  const formattedZoomPasscode = `${config.prefix}${formattedDate.slice(2)}`;
-  const formattedSlidoEventCode = `${config.prefix}${formattedDate.slice(2)}`;
+  const formattedZoomUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-zoom`;
+  const formattedYoutubeUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-youtube`;
+  const formattedSurveyUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-survey`;
+  const formattedSlidoUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-slido`;
+  const formattedZoomPasscode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
+  const formattedSlidoEventCode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
 
   const formatEventDate = (date: string) => {
     return dayjs(date).format("YYYY年MM月DD日(ddd)");
