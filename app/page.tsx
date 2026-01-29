@@ -29,6 +29,10 @@ import {
   persistAppState,
   AppState,
   UrlField,
+  ShortUrlType,
+  SHORT_URL_TYPES,
+  buildShortUrl,
+  buildEventCode,
 } from "@/lib/appState";
 import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 dayjs.locale("ja");
@@ -290,22 +294,31 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  const urlTypes = ["zoom", "youtube", "survey", "slido"] as const;
-  type UrlType = (typeof urlTypes)[number];
+  const { shortUrlsByType, buildCode } = useMemo(() => {
+    const date = dayjs(eventDate).format("YYYYMM");
+    const basePrefix = config.prefix || defaultConfig.prefix;
+    const shortUrlsByType = SHORT_URL_TYPES.reduce(
+      (acc, type) => {
+        acc[type] = buildShortUrl({
+          baseUrl: config.shortUrl.baseUrl,
+          prefix: basePrefix,
+          date,
+          type,
+        });
+        return acc;
+      },
+      {} as Record<ShortUrlType, string>
+    );
+    return {
+      shortUrlsByType,
+      buildCode: () => buildEventCode({ prefix: basePrefix, date }),
+    };
+  }, [eventDate, config.shortUrl.baseUrl, config.prefix]);
 
-  const formattedDate = useMemo(
-    () => dayjs(eventDate).format("YYYYMM"),
-    [eventDate]
-  );
-  const buildShortUrl = (type: UrlType) =>
-    `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-${type}`;
-  const buildCode = () =>
-    `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
-
-  const formattedZoomUrl = buildShortUrl("zoom");
-  const formattedYoutubeUrl = buildShortUrl("youtube");
-  const formattedSurveyUrl = buildShortUrl("survey");
-  const formattedSlidoUrl = buildShortUrl("slido");
+  const formattedZoomUrl = shortUrlsByType.zoom;
+  const formattedYoutubeUrl = shortUrlsByType.youtube;
+  const formattedSurveyUrl = shortUrlsByType.survey;
+  const formattedSlidoUrl = shortUrlsByType.slido;
   const formattedZoomPasscode = buildCode();
   const formattedSlidoEventCode = buildCode();
 

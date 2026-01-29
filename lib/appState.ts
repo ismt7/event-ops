@@ -61,6 +61,29 @@ export type UrlField =
   | "slidoUrl"
   | "connpassUrl";
 
+export const SHORT_URL_TYPES = ["zoom", "youtube", "survey", "slido"] as const;
+export type ShortUrlType = (typeof SHORT_URL_TYPES)[number];
+
+export const buildShortUrl = ({
+  baseUrl,
+  prefix,
+  date,
+  type,
+}: {
+  baseUrl: string;
+  prefix: string;
+  date: string;
+  type: ShortUrlType;
+}) => `${baseUrl}/${prefix}${date}-${type}`;
+
+export const buildEventCode = ({
+  prefix,
+  date,
+}: {
+  prefix: string;
+  date: string;
+}) => `${prefix}${date.slice(2)}`;
+
 export const LEGACY_STORAGE_KEYS = [
   "config",
   "zoomUrl",
