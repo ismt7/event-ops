@@ -34,8 +34,14 @@ export default function LeadTextModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-1/2 h-3/4 flex flex-col">
+    <div
+      className="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-lg p-6 w-1/2 h-3/4 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-xl font-bold mb-4">リード文を編集</h2>
         <textarea
           rows={10}
