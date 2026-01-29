@@ -6,9 +6,18 @@ interface UrlFormProps {
   id: string;
   value: string;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: (e: ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
 }
 
-const UrlForm: React.FC<UrlFormProps> = ({ label, id, value, onChange }) => {
+const UrlForm: React.FC<UrlFormProps> = ({
+  label,
+  id,
+  value,
+  onChange,
+  onBlur,
+  error,
+}) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = (e: MouseEvent<HTMLButtonElement>) => {
@@ -32,8 +41,13 @@ const UrlForm: React.FC<UrlFormProps> = ({ label, id, value, onChange }) => {
           id={id}
           value={value}
           onChange={onChange}
-          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline pr-16"
+          onBlur={onBlur}
+          className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline pr-16 ${
+            error ? "border-red-500" : ""
+          }`}
           required
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : undefined}
         />
         <button
           onClick={handleCopy}
@@ -51,6 +65,11 @@ const UrlForm: React.FC<UrlFormProps> = ({ label, id, value, onChange }) => {
           </div>
         )}
       </div>
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-xs text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   );
 };

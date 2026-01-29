@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, MouseEvent } from "react";
+import {
+  useState,
+  useRef,
+  useReducer,
+  useEffect,
+  useMemo,
+  ChangeEvent,
+  MouseEvent,
+} from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ja";
 import defaultConfig from "@/event-ops.config";
@@ -13,7 +21,15 @@ import ReadOnlyPasscode from "@/app/components/ReadOnlyPasscode";
 import TemplateEditor from "@/app/components/TemplateEditor";
 import { saveAs } from "file-saver";
 import { storage } from "@/lib/storage";
-import { useLocalStorageState } from "@/lib/useLocalStorageState";
+import {
+  createDefaultState,
+  appReducer,
+  initState,
+  migrateLegacyState,
+  persistAppState,
+  AppState,
+  UrlField,
+} from "@/lib/appState";
 import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 dayjs.locale("ja");
 
@@ -25,14 +41,6 @@ const validateUrl = (url: string, domain: string) => {
     return false;
   }
 };
-
-const handleUrlChange =
-  (setUrl: React.Dispatch<React.SetStateAction<string>>, domain: string) =>
-  (e: ChangeEvent<HTMLInputElement>) => {
-    const url = e.target.value;
-    setUrl(url);
-    validateUrl(url, domain); // バリデーションは実行するが結果は利用しない
-  };
 
 interface TabProps {
   tabs: string[];
@@ -60,96 +68,122 @@ const Tabs: React.FC<TabProps> = ({ tabs, activeTab, onTabClick }) => (
   </div>
 );
 
-interface Template {
-  id: string;
-  name: string;
-  text: string;
-}
+type State = AppState;
 
-interface Link {
-  id: string;
-  name: string;
-  url: string;
-}
+const initReducerState = (base: State): State => {
+  if (typeof window === "undefined") return base;
+  return initState(base, storage);
+};
 
 export default function Home() {
-  const [config, setConfig] = useLocalStorageState("config", defaultConfig);
-  const [zoomUrl, setZoomUrl] = useLocalStorageState("zoomUrl", "");
-  const [youtubeUrl, setYoutubeUrl] = useLocalStorageState("youtubeUrl", "");
-  const [surveyUrl, setSurveyUrl] = useLocalStorageState("surveyUrl", "");
-  const [slidoUrl, setSlidoUrl] = useLocalStorageState("slidoUrl", "");
-  const [connpassUrl, setConnpassUrl] = useLocalStorageState("connpassUrl", "");
-  const [eventDate, setEventDate] = useLocalStorageState(
-    "eventDate",
-    () => dayjs().format("YYYY-MM-DD")
-  );
-  const [eventTitle, setEventTitle] = useLocalStorageState("eventTitle", "");
-  const [eventDescription, setEventDescription] = useLocalStorageState(
-    "eventDescription",
-    ""
+  const [state, dispatch] = useReducer(appReducer, defaultConfig, (config) =>
+    initReducerState(createDefaultState(config))
   );
   const [message, setMessage] = useState("");
-  const [templates, setTemplates] = useLocalStorageState<Template[]>(
-    "templates",
-    []
-  );
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null
-  );
-  const [templateText, setTemplateText] = useState("");
-  const [templateName, setTemplateName] = useState("");
-  const [activeTab, setActiveTab] = useState("編集");
-  const [links, setLinks] = useLocalStorageState<Link[]>("links", []);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newLinkName, setNewLinkName] = useState("");
-  const [newLinkUrl, setNewLinkUrl] = useState("");
   const templateEditorRef = useRef<HTMLTextAreaElement>(null);
-  const [showTemplateVariables, setShowTemplateVariables] = useState(true);
+
+
+  const {
+    config,
+    zoomUrl,
+    youtubeUrl,
+    surveyUrl,
+    slidoUrl,
+    connpassUrl,
+    urlErrors,
+    urlTouched,
+    eventDate,
+    eventTitle,
+    eventDescription,
+    templates,
+    selectedTemplateId,
+    templateText,
+    templateName,
+    activeTab,
+    links,
+    isModalOpen,
+    newLinkName,
+    newLinkUrl,
+    showTemplateVariables,
+  } = state;
+
+  useEffect(() => {
+    persistAppState(storage, state);
+  }, [
+    config,
+    zoomUrl,
+    youtubeUrl,
+    surveyUrl,
+    slidoUrl,
+    connpassUrl,
+    eventDate,
+    eventTitle,
+    eventDescription,
+    templates,
+    links,
+    state,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    migrateLegacyState(storage, state);
+  }, []);
+
+  const handleUrlChange =
+    (field: UrlField, domain: string) =>
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const url = e.target.value;
+      dispatch({ type: "SET_FIELD", field, value: url });
+      const isValid = url === "" || validateUrl(url, domain);
+      const error = isValid ? "" : `${domain} のURLを入力してください。`;
+      dispatch({ type: "SET_URL_ERROR", field, value: error });
+    };
+
+  const handleUrlBlur =
+    (field: UrlField) => (e: ChangeEvent<HTMLInputElement>) => {
+      if (e.target.value === "") return;
+      dispatch({ type: "SET_URL_TOUCHED", field, value: true });
+    };
 
   const handleClear = () => {
     storage.clear();
-    setConfig(defaultConfig);
-    setZoomUrl("");
-    setYoutubeUrl("");
-    setSurveyUrl("");
-    setSlidoUrl("");
-    setConnpassUrl("");
-    setEventDate(dayjs().format("YYYY-MM-DD"));
-    setEventTitle("");
-    setEventDescription("");
-    setTemplateText("");
-    setLinks([]);
+    dispatch({ type: "RESET", value: createDefaultState(defaultConfig) });
     setMessage("ローカルストレージをクリアしました！");
     setTimeout(() => setMessage(""), 3000);
   };
 
   const handleTemplateChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const templateId = e.target.value;
-    setSelectedTemplateId(templateId);
     const selectedTemplate = templates.find(
       (template) => template.id === templateId
     );
-    setTemplateText(selectedTemplate ? selectedTemplate.text : "");
-    setTemplateName(selectedTemplate ? selectedTemplate.name : "");
+    dispatch({
+        type: "SELECT_TEMPLATE",
+        value: {
+          id: templateId,
+          name: selectedTemplate ? selectedTemplate.name : "",
+          text: selectedTemplate ? selectedTemplate.text : "",
+        },
+      });
   };
 
   const handleTemplateSave = () => {
     if (selectedTemplateId) {
-      setTemplates((prevTemplates) =>
-        prevTemplates.map((template) =>
-          template.id === selectedTemplateId
-            ? { ...template, name: templateName, text: templateText }
-            : template
-        )
-      );
+      dispatch({
+        type: "UPDATE_TEMPLATE",
+        value: {
+          id: selectedTemplateId,
+          name: templateName,
+          text: templateText,
+        },
+      });
     } else {
       const newTemplate = {
         id: dayjs().format("YYYYMMDDHHmmss"),
         name: templateName,
         text: templateText,
       };
-      setTemplates((prevTemplates) => [...prevTemplates, newTemplate]);
-      setSelectedTemplateId(newTemplate.id);
+      dispatch({ type: "ADD_TEMPLATE", value: newTemplate });
     }
     setMessage("テンプレートが保存されました！");
     setTimeout(() => setMessage(""), 3000);
@@ -157,12 +191,10 @@ export default function Home() {
 
   const handleTemplateDelete = () => {
     if (selectedTemplateId) {
-      setTemplates((prevTemplates) =>
-        prevTemplates.filter((template) => template.id !== selectedTemplateId)
-      );
-      setSelectedTemplateId(null);
-      setTemplateText("");
-      setTemplateName("");
+      dispatch({
+        type: "DELETE_TEMPLATE",
+        value: { id: selectedTemplateId },
+      });
       setMessage("テンプレートが削除されました！");
       setTimeout(() => setMessage(""), 3000);
     }
@@ -175,20 +207,16 @@ export default function Home() {
         name: newLinkName,
         url: newLinkUrl,
       };
-      setLinks((prevLinks) => [...prevLinks, newLink]);
-      setNewLinkName("");
-      setNewLinkUrl("");
-      setIsModalOpen(false);
+      dispatch({ type: "ADD_LINK", value: newLink });
     }
   };
 
   const handleDeleteLink = (id: string) => {
-    setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
+    dispatch({ type: "REMOVE_LINK", value: { id } });
   };
 
   const handleExport = () => {
-    const storedConfig = storage.getItem<typeof config>("config");
-    const currentConfig = storedConfig || defaultConfig;
+    const currentConfig = config || defaultConfig;
 
     const data = {
       config: currentConfig,
@@ -236,19 +264,22 @@ export default function Home() {
           prefix: importedData.config?.prefix || defaultConfig.prefix,
         };
 
-        setConfig(newConfig);
-        storage.setItem("config", newConfig);
-
-        setZoomUrl(importedData.zoomUrl || "");
-        setYoutubeUrl(importedData.youtubeUrl || "");
-        setSurveyUrl(importedData.surveyUrl || "");
-        setSlidoUrl(importedData.slidoUrl || "");
-        setConnpassUrl(importedData.connpassUrl || "");
-        setEventDate(importedData.eventDate || dayjs().format("YYYY-MM-DD"));
-        setEventTitle(importedData.eventTitle || "");
-        setEventDescription(importedData.eventDescription || "");
-        setTemplates(importedData.templates || []);
-        setLinks(importedData.links || []);
+        dispatch({ type: "IMPORT_CONFIG", value: { config: newConfig } });
+        dispatch({
+          type: "IMPORT_EVENT_DATA",
+          value: {
+            zoomUrl: importedData.zoomUrl || "",
+            youtubeUrl: importedData.youtubeUrl || "",
+            surveyUrl: importedData.surveyUrl || "",
+            slidoUrl: importedData.slidoUrl || "",
+            connpassUrl: importedData.connpassUrl || "",
+            eventDate: importedData.eventDate || dayjs().format("YYYY-MM-DD"),
+            eventTitle: importedData.eventTitle || "",
+            eventDescription: importedData.eventDescription || "",
+            templates: importedData.templates || [],
+            links: importedData.links || [],
+          },
+        });
 
         setMessage("JSONファイルをインポートしました！");
         setTimeout(() => setMessage(""), 3000);
@@ -259,13 +290,24 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  const formattedDate = dayjs(eventDate).format("YYYYMM");
-  const formattedZoomUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-zoom`;
-  const formattedYoutubeUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-youtube`;
-  const formattedSurveyUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-survey`;
-  const formattedSlidoUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-slido`;
-  const formattedZoomPasscode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
-  const formattedSlidoEventCode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
+  const urlTypes = ["zoom", "youtube", "survey", "slido"] as const;
+  type UrlType = (typeof urlTypes)[number];
+
+  const formattedDate = useMemo(
+    () => dayjs(eventDate).format("YYYYMM"),
+    [eventDate]
+  );
+  const buildShortUrl = (type: UrlType) =>
+    `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-${type}`;
+  const buildCode = () =>
+    `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
+
+  const formattedZoomUrl = buildShortUrl("zoom");
+  const formattedYoutubeUrl = buildShortUrl("youtube");
+  const formattedSurveyUrl = buildShortUrl("survey");
+  const formattedSlidoUrl = buildShortUrl("slido");
+  const formattedZoomPasscode = buildCode();
+  const formattedSlidoEventCode = buildCode();
 
   const formatEventDate = (date: string) => {
     return dayjs(date).format("YYYY年MM月DD日(ddd)");
@@ -316,7 +358,11 @@ export default function Home() {
     const suffix = needsSpaceAfter ? " " : "";
     const insertion = `${prefix}${variable}${suffix}`;
     if (!textarea) {
-      setTemplateText((prev) => (prev ? `${prev}${insertion}` : insertion));
+      dispatch({
+        type: "SET_FIELD",
+        field: "templateText",
+        value: templateText ? `${templateText}${insertion}` : insertion,
+      });
       return;
     }
 
@@ -324,7 +370,7 @@ export default function Home() {
     const end = textarea.selectionEnd ?? templateText.length;
     const newValue =
       templateText.slice(0, start) + insertion + templateText.slice(end);
-    setTemplateText(newValue);
+    dispatch({ type: "SET_FIELD", field: "templateText", value: newValue });
 
     requestAnimationFrame(() => {
       const cursor = start + insertion.length;
@@ -368,7 +414,13 @@ export default function Home() {
               </div>
             ))}
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "isModalOpen",
+                  value: true,
+                })
+              }
               className="flex items-center justify-center p-4 border-2 border-dashed rounded text-gray-500 hover:text-gray-700 hover:border-gray-700"
             >
               <PlusCircleIcon className="h-6 w-6 mr-2" />
@@ -387,7 +439,13 @@ export default function Home() {
                   label="リンク名"
                   id="linkName"
                   value={newLinkName}
-                  onChange={(e) => setNewLinkName(e.target.value)}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "newLinkName",
+                      value: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="mb-4">
@@ -395,12 +453,24 @@ export default function Home() {
                   label="リンクURL"
                   id="linkUrl"
                   value={newLinkUrl}
-                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "newLinkUrl",
+                      value: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="flex justify-end">
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "isModalOpen",
+                      value: false,
+                    })
+                  }
                   className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mr-2"
                 >
                   キャンセル
@@ -433,19 +503,37 @@ export default function Home() {
               label="イベントタイトル"
               id="eventTitle"
               value={eventTitle}
-              onChange={(e) => setEventTitle(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventTitle",
+                  value: e.target.value,
+                })
+              }
             />
             <TextAreaForm
               label="イベント概要"
               id="eventDescription"
               value={eventDescription}
-              onChange={(e) => setEventDescription(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventDescription",
+                  value: e.target.value,
+                })
+              }
             />
             <DateForm
               label="イベント開始日"
               id="eventDate"
               value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventDate",
+                  value: e.target.value,
+                })
+              }
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -453,34 +541,44 @@ export default function Home() {
               label="Zoom URL"
               id="zoomUrl"
               value={zoomUrl}
-              onChange={handleUrlChange(setZoomUrl, "us06web.zoom.us")}
+              onChange={handleUrlChange("zoomUrl", "us06web.zoom.us")}
+              onBlur={handleUrlBlur("zoomUrl")}
+              error={urlTouched.zoomUrl ? urlErrors.zoomUrl : ""}
             />
             <UrlForm
               label="YouTube URL"
               id="youtubeUrl"
               value={youtubeUrl}
-              onChange={handleUrlChange(setYoutubeUrl, "www.youtube.com")}
+              onChange={handleUrlChange("youtubeUrl", "www.youtube.com")}
+              onBlur={handleUrlBlur("youtubeUrl")}
+              error={urlTouched.youtubeUrl ? urlErrors.youtubeUrl : ""}
             />
             <UrlForm
               label="Survey URL"
               id="surveyUrl"
               value={surveyUrl}
-              onChange={handleUrlChange(setSurveyUrl, "docs.google.com")}
+              onChange={handleUrlChange("surveyUrl", "docs.google.com")}
+              onBlur={handleUrlBlur("surveyUrl")}
+              error={urlTouched.surveyUrl ? urlErrors.surveyUrl : ""}
             />
             <UrlForm
               label="Slido URL"
               id="slidoUrl"
               value={slidoUrl}
-              onChange={handleUrlChange(setSlidoUrl, "app.sli.do")}
+              onChange={handleUrlChange("slidoUrl", "app.sli.do")}
+              onBlur={handleUrlBlur("slidoUrl")}
+              error={urlTouched.slidoUrl ? urlErrors.slidoUrl : ""}
             />
             <UrlForm
               label="connpass URL"
               id="connpassUrl"
               value={connpassUrl}
               onChange={handleUrlChange(
-                setConnpassUrl,
+                "connpassUrl",
                 config.connpass.baseUrl
               )}
+              onBlur={handleUrlBlur("connpassUrl")}
+              error={urlTouched.connpassUrl ? urlErrors.connpassUrl : ""}
             />
           </div>
           <div className="bg-gray-50 shadow-inner rounded-lg p-6 mt-8">
@@ -568,19 +666,33 @@ export default function Home() {
             label="テンプレート名"
             id="templateName"
             value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
+            onChange={(e) =>
+              dispatch({
+                type: "SET_FIELD",
+                field: "templateName",
+                value: e.target.value,
+              })
+            }
           />
           <Tabs
             tabs={["編集", "プレビュー"]}
             activeTab={activeTab}
-            onTabClick={setActiveTab}
+            onTabClick={(tab) =>
+              dispatch({ type: "SET_FIELD", field: "activeTab", value: tab })
+            }
           />
           {activeTab === "編集" ? (
             <div>
               <TemplateEditor
                 ref={templateEditorRef}
                 value={templateText}
-                onChange={(value) => setTemplateText(value)}
+                onChange={(value) =>
+                  dispatch({
+                    type: "SET_FIELD",
+                    field: "templateText",
+                    value,
+                  })
+                }
               />
               <div className="mt-4">
                 <div className="flex items-center justify-between">
@@ -591,7 +703,11 @@ export default function Home() {
                     type="button"
                     className="text-xs text-gray-500 hover:text-gray-700"
                     onClick={() =>
-                      setShowTemplateVariables((prev) => !prev)
+                      dispatch({
+                        type: "SET_FIELD",
+                        field: "showTemplateVariables",
+                        value: !showTemplateVariables,
+                      })
                     }
                   >
                     {showTemplateVariables ? "閉じる" : "開く"}
