@@ -22,11 +22,20 @@ export default function EventReportPage() {
   const [leadText, setLeadText] = useState("");
   const [seminarVideoUrl, setSeminarVideoUrl] = useState("");
   const [presentationUrl, setPresentationUrl] = useState("");
+  const [openAiApiKey, setOpenAiApiKey] = useState("");
+  const [openAiPromptInstruction, setOpenAiPromptInstruction] = useState("");
   const [questions, setQuestions] = useState<Question[]>([
     { id: uuidv4(), title: "", content: "", answer: "" },
   ]);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isLeadTextModalOpen, setIsLeadTextModalOpen] = useState(false);
+  const [generatingTitleIds, setGeneratingTitleIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [generatingAnswerIds, setGeneratingAnswerIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [chatGptError, setChatGptError] = useState<string | null>(null);
 
   useEffect(() => {
     const savedReportTitle = loadFromLocalStorage<string>("reportTitle");
@@ -36,12 +45,21 @@ export default function EventReportPage() {
     const savedPresentationUrl =
       loadFromLocalStorage<string>("presentationUrl");
     const savedQuestions = loadFromLocalStorage<Question[]>("questions");
+    const savedOpenAiApiKey =
+      loadFromLocalStorage<string>("openAiApiKey");
+    const savedOpenAiPromptInstruction = loadFromLocalStorage<string>(
+      "openAiPromptInstruction"
+    );
 
     if (savedReportTitle) setReportTitle(savedReportTitle);
     if (savedLeadText) setLeadText(savedLeadText);
     if (savedSeminarVideoUrl) setSeminarVideoUrl(savedSeminarVideoUrl);
     if (savedPresentationUrl) setPresentationUrl(savedPresentationUrl);
     if (savedQuestions) setQuestions(savedQuestions);
+    if (savedOpenAiApiKey) setOpenAiApiKey(savedOpenAiApiKey);
+    if (savedOpenAiPromptInstruction) {
+      setOpenAiPromptInstruction(savedOpenAiPromptInstruction);
+    }
   }, []);
 
   const handleSave = () => {
@@ -77,6 +95,96 @@ export default function EventReportPage() {
       { id: newId, title: "", content: "", answer: "" },
     ]);
     setActiveQuestionId(newId);
+  };
+
+  const requestChatGpt = async (prompt: string) => {
+    const fullPrompt = openAiPromptInstruction
+      ? `${prompt}\n\n追加指示:\n${openAiPromptInstruction}`
+      : prompt;
+    const response = await fetch("/api/chatgpt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: openAiApiKey, prompt: fullPrompt }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as {
+      text?: string;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(
+        typeof data.error === "string"
+          ? data.error
+          : "ChatGPTの呼び出しに失敗しました。"
+      );
+    }
+
+    return typeof data.text === "string" ? data.text : "";
+  };
+
+  const handleGenerateTitle = async (id: string) => {
+    if (!openAiApiKey) {
+      setChatGptError(
+        "ChatGPTを使うには設定画面でAPIキーを入力してください。"
+      );
+      return;
+    }
+
+    const question = questions.find((q) => q.id === id);
+    if (!question?.content) {
+      setChatGptError("見出しを生成するには質問内容を入力してください。");
+      return;
+    }
+
+    setChatGptError(null);
+    setGeneratingTitleIds((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      const prompt = `次の質問内容から、イベントレポートのQ&A見出しを日本語で簡潔に1行で作成してください。\n\n質問内容:\n${question.content}\n\n既存の見出し:\n${question.title || "未設定"}`;
+      const text = (await requestChatGpt(prompt)).trim();
+      if (text) {
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === id ? { ...q, title: text } : q))
+        );
+      }
+    } catch (error) {
+      setChatGptError("ChatGPTの呼び出しに失敗しました。");
+    } finally {
+      setGeneratingTitleIds((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleGenerateAnswer = async (id: string) => {
+    if (!openAiApiKey) {
+      setChatGptError(
+        "ChatGPTを使うには設定画面でAPIキーを入力してください。"
+      );
+      return;
+    }
+
+    const question = questions.find((q) => q.id === id);
+    if (!question?.content) {
+      setChatGptError("回答を生成するには質問内容を入力してください。");
+      return;
+    }
+
+    setChatGptError(null);
+    setGeneratingAnswerIds((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      const prompt = `次の質問に対するイベントレポート向けの回答を、日本語で簡潔にまとめてください。\n\nレポートタイトル:\n${reportTitle || "未設定"}\n\n質問:\n${question.content}\n\n既存の回答:\n${question.answer || "未設定"}`;
+      const text = (await requestChatGpt(prompt)).trim();
+      if (text) {
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === id ? { ...q, answer: text } : q))
+        );
+      }
+    } catch (error) {
+      setChatGptError("ChatGPTの呼び出しに失敗しました。");
+    } finally {
+      setGeneratingAnswerIds((prev) => ({ ...prev, [id]: false }));
+    }
   };
 
   return (
@@ -163,6 +271,14 @@ export default function EventReportPage() {
                   onChange={(e) => setPresentationUrl(e.target.value)}
                 />
               </div>
+              {!openAiApiKey && (
+                <p className="text-xs text-gray-500">
+                  ChatGPTを使うには設定画面でAPIキーを入力してください。
+                </p>
+              )}
+              {chatGptError && (
+                <p className="text-xs text-red-600">{chatGptError}</p>
+              )}
               <QuestionList
                 questions={questions}
                 activeQuestionId={activeQuestionId}
@@ -181,6 +297,11 @@ export default function EventReportPage() {
                     )
                   )
                 }
+                onGenerateTitle={handleGenerateTitle}
+                onGenerateAnswer={handleGenerateAnswer}
+                canUseChatGpt={!!openAiApiKey}
+                generatingTitleIds={generatingTitleIds}
+                generatingAnswerIds={generatingAnswerIds}
               />
               <div className="flex space-x-4">
                 <button

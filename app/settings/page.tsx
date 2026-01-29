@@ -6,6 +6,8 @@ import { storage } from "@/lib/storage";
 
 export default function Settings() {
   const [config, setConfig] = useState(defaultConfig);
+  const [openAiApiKey, setOpenAiApiKey] = useState("");
+  const [openAiPromptInstruction, setOpenAiPromptInstruction] = useState("");
   const [message, setMessage] = useState("");
 
   // 初期表示時にストレージから設定を読み込む
@@ -27,10 +29,22 @@ export default function Settings() {
         },
       }));
     }
+    const storedOpenAiApiKey = storage.getItem<string>("openAiApiKey");
+    if (storedOpenAiApiKey) {
+      setOpenAiApiKey(storedOpenAiApiKey);
+    }
+    const storedOpenAiPromptInstruction = storage.getItem<string>(
+      "openAiPromptInstruction"
+    );
+    if (storedOpenAiPromptInstruction) {
+      setOpenAiPromptInstruction(storedOpenAiPromptInstruction);
+    }
   }, []);
 
   const handleSave = () => {
     storage.setItem("config", config);
+    storage.setItem("openAiApiKey", openAiApiKey);
+    storage.setItem("openAiPromptInstruction", openAiPromptInstruction);
     setMessage("設定が保存されました！");
     setTimeout(() => setMessage(""), 3000);
   };
@@ -117,6 +131,45 @@ export default function Settings() {
                 }
                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               />
+            </div>
+            <div>
+              <label
+                htmlFor="openAiApiKey"
+                className="block text-gray-700 text-sm font-bold mb-2"
+              >
+                ChatGPT APIキー
+              </label>
+              <input
+                type="password"
+                id="openAiApiKey"
+                value={openAiApiKey}
+                onChange={(e) => setOpenAiApiKey(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="sk-..."
+                autoComplete="off"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                APIキーはローカルストレージに保存されます。
+              </p>
+            </div>
+            <div>
+              <label
+                htmlFor="openAiPromptInstruction"
+                className="block text-gray-700 text-sm font-bold mb-2"
+              >
+                ChatGPT プロンプト指示
+              </label>
+              <textarea
+                id="openAiPromptInstruction"
+                value={openAiPromptInstruction}
+                onChange={(e) => setOpenAiPromptInstruction(e.target.value)}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                placeholder="例: 丁寧な文体で、箇条書きを避けてください。"
+                rows={3}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                レポート生成時の追加指示としてプロンプトに付与されます。
+              </p>
             </div>
           </div>
           <button
