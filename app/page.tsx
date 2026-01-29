@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ChangeEvent, MouseEvent } from "react";
+import { useState, useRef, ChangeEvent, MouseEvent } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ja";
 import defaultConfig from "@/event-ops.config";
@@ -13,6 +13,7 @@ import ReadOnlyPasscode from "@/app/components/ReadOnlyPasscode";
 import TemplateEditor from "@/app/components/TemplateEditor";
 import { saveAs } from "file-saver";
 import { storage } from "@/lib/storage";
+import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 dayjs.locale("ja");
 
@@ -72,104 +73,42 @@ interface Link {
 }
 
 export default function Home() {
-  const [config, setConfig] = useState(defaultConfig);
-  const [zoomUrl, setZoomUrl] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [surveyUrl, setSurveyUrl] = useState("");
-  const [slidoUrl, setSlidoUrl] = useState("");
-  const [connpassUrl, setConnpassUrl] = useState("");
-  const [eventDate, setEventDate] = useState(dayjs().format("YYYY-MM-DD"));
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventDescription, setEventDescription] = useState("");
+  const [config, setConfig] = useLocalStorageState("config", defaultConfig);
+  const [zoomUrl, setZoomUrl] = useLocalStorageState("zoomUrl", "");
+  const [youtubeUrl, setYoutubeUrl] = useLocalStorageState("youtubeUrl", "");
+  const [surveyUrl, setSurveyUrl] = useLocalStorageState("surveyUrl", "");
+  const [slidoUrl, setSlidoUrl] = useLocalStorageState("slidoUrl", "");
+  const [connpassUrl, setConnpassUrl] = useLocalStorageState("connpassUrl", "");
+  const [eventDate, setEventDate] = useLocalStorageState(
+    "eventDate",
+    () => dayjs().format("YYYY-MM-DD")
+  );
+  const [eventTitle, setEventTitle] = useLocalStorageState("eventTitle", "");
+  const [eventDescription, setEventDescription] = useLocalStorageState(
+    "eventDescription",
+    ""
+  );
   const [message, setMessage] = useState("");
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useLocalStorageState<Template[]>(
+    "templates",
+    []
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null
   );
   const [templateText, setTemplateText] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [activeTab, setActiveTab] = useState("編集");
-  const [links, setLinks] = useState<Link[]>([]);
+  const [links, setLinks] = useLocalStorageState<Link[]>("links", []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newLinkName, setNewLinkName] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
-
-  useEffect(() => {
-    // 初回起動時にdefaultConfigをstorageに保存
-    const storedConfig = storage.getItem<typeof config>("config");
-    if (!storedConfig) {
-      storage.setItem("config", defaultConfig);
-    } else {
-      setConfig(storedConfig); // ローカルストレージから読み込んだconfigをセット
-    }
-  }, []);
-
-  useEffect(() => {
-    const storedZoomUrl = storage.getItem<string>("zoomUrl");
-    const storedYoutubeUrl = storage.getItem<string>("youtubeUrl");
-    const storedSurveyUrl = storage.getItem<string>("surveyUrl");
-    const storedSlidoUrl = storage.getItem<string>("slidoUrl");
-    const storedConnpassUrl = storage.getItem<string>("connpassUrl");
-    const storedEventDate = storage.getItem<string>("eventDate");
-    const storedEventTitle = storage.getItem<string>("eventTitle");
-    const storedEventDescription = storage.getItem<string>("eventDescription");
-    const storedTemplates = storage.getItem<Template[]>("templates");
-    const storedLinks = storage.getItem<Link[]>("links");
-
-    if (storedZoomUrl) setZoomUrl(storedZoomUrl);
-    if (storedYoutubeUrl) setYoutubeUrl(storedYoutubeUrl);
-    if (storedSurveyUrl) setSurveyUrl(storedSurveyUrl);
-    if (storedSlidoUrl) setSlidoUrl(storedSlidoUrl);
-    if (storedConnpassUrl) setConnpassUrl(storedConnpassUrl);
-    if (storedEventDate) setEventDate(storedEventDate);
-    if (storedEventTitle) setEventTitle(storedEventTitle);
-    if (storedEventDescription) setEventDescription(storedEventDescription);
-    if (storedTemplates) setTemplates(storedTemplates);
-    if (storedLinks) setLinks(storedLinks);
-  }, []);
-
-  useEffect(() => {
-    storage.setItem("zoomUrl", zoomUrl);
-  }, [zoomUrl]);
-
-  useEffect(() => {
-    storage.setItem("youtubeUrl", youtubeUrl);
-  }, [youtubeUrl]);
-
-  useEffect(() => {
-    storage.setItem("surveyUrl", surveyUrl);
-  }, [surveyUrl]);
-
-  useEffect(() => {
-    storage.setItem("slidoUrl", slidoUrl);
-  }, [slidoUrl]);
-
-  useEffect(() => {
-    storage.setItem("connpassUrl", connpassUrl);
-  }, [connpassUrl]);
-
-  useEffect(() => {
-    storage.setItem("eventDate", eventDate);
-  }, [eventDate]);
-
-  useEffect(() => {
-    storage.setItem("eventTitle", eventTitle);
-  }, [eventTitle]);
-
-  useEffect(() => {
-    storage.setItem("eventDescription", eventDescription);
-  }, [eventDescription]);
-
-  useEffect(() => {
-    storage.setItem("templates", templates);
-  }, [templates]);
-
-  useEffect(() => {
-    storage.setItem("links", links);
-  }, [links]);
+  const templateEditorRef = useRef<HTMLTextAreaElement>(null);
+  const [showTemplateVariables, setShowTemplateVariables] = useState(true);
 
   const handleClear = () => {
     storage.clear();
+    setConfig(defaultConfig);
     setZoomUrl("");
     setYoutubeUrl("");
     setSurveyUrl("");
@@ -311,24 +250,6 @@ export default function Home() {
         setTemplates(importedData.templates || []);
         setLinks(importedData.links || []);
 
-        // 他の値もローカルストレージを更新
-        storage.setItem("zoomUrl", importedData.zoomUrl || "");
-        storage.setItem("youtubeUrl", importedData.youtubeUrl || "");
-        storage.setItem("surveyUrl", importedData.surveyUrl || "");
-        storage.setItem("slidoUrl", importedData.slidoUrl || "");
-        storage.setItem("connpassUrl", importedData.connpassUrl || "");
-        storage.setItem(
-          "eventDate",
-          importedData.eventDate || dayjs().format("YYYY-MM-DD")
-        );
-        storage.setItem("eventTitle", importedData.eventTitle || "");
-        storage.setItem(
-          "eventDescription",
-          importedData.eventDescription || ""
-        );
-        storage.setItem("templates", importedData.templates || []);
-        storage.setItem("links", importedData.links || []);
-
         setMessage("JSONファイルをインポートしました！");
         setTimeout(() => setMessage(""), 3000);
       } catch {
@@ -350,17 +271,67 @@ export default function Home() {
     return dayjs(date).format("YYYY年MM月DD日(ddd)");
   };
 
-  const previewText = templateText
-    .replace("{zoomUrl}", formattedZoomUrl)
-    .replace("{youtubeUrl}", formattedYoutubeUrl)
-    .replace("{surveyUrl}", formattedSurveyUrl)
-    .replace("{slidoUrl}", formattedSlidoUrl)
-    .replace("{connpassUrl}", connpassUrl)
-    .replace("{zoomPasscode}", formattedZoomPasscode)
-    .replace("{slidoEventCode}", formattedSlidoEventCode)
-    .replace("{eventTitle}", eventTitle)
-    .replace("{eventDescription}", eventDescription)
-    .replace("{eventDate}", formatEventDate(eventDate));
+  const templateVariables = {
+    "{zoomUrl}": formattedZoomUrl,
+    "{youtubeUrl}": formattedYoutubeUrl,
+    "{surveyUrl}": formattedSurveyUrl,
+    "{slidoUrl}": formattedSlidoUrl,
+    "{connpassUrl}": connpassUrl,
+    "{zoomPasscode}": formattedZoomPasscode,
+    "{slidoEventCode}": formattedSlidoEventCode,
+    "{eventTitle}": eventTitle,
+    "{eventDescription}": eventDescription,
+    "{eventDate}": formatEventDate(eventDate),
+  };
+  const templateVariableList = [
+    { key: "{zoomUrl}", description: "ZoomのURL" },
+    { key: "{youtubeUrl}", description: "YouTubeのURL" },
+    { key: "{surveyUrl}", description: "アンケートのURL" },
+    { key: "{slidoUrl}", description: "SlidoのURL" },
+    { key: "{connpassUrl}", description: "connpassのURL" },
+    { key: "{zoomPasscode}", description: "Zoomのパスコード" },
+    { key: "{slidoEventCode}", description: "Slidoのイベントコード" },
+    { key: "{eventTitle}", description: "イベントタイトル" },
+    { key: "{eventDescription}", description: "イベント概要" },
+    { key: "{eventDate}", description: "イベント開始日" },
+  ];
+
+  const previewText = Object.entries(templateVariables).reduce(
+    (text, [key, value]) => text.replaceAll(key, value),
+    templateText
+  );
+
+  const handleInsertTemplateVariable = (variable: string) => {
+    const textarea = templateEditorRef.current;
+    const needsSpaceBefore =
+      templateText.length > 0 &&
+      !/\s$/.test(
+        templateText.slice(0, textarea?.selectionStart ?? templateText.length)
+      );
+    const needsSpaceAfter =
+      !!textarea &&
+      textarea.selectionEnd < templateText.length &&
+      !/^\s/.test(templateText.slice(textarea.selectionEnd));
+    const prefix = needsSpaceBefore ? " " : "";
+    const suffix = needsSpaceAfter ? " " : "";
+    const insertion = `${prefix}${variable}${suffix}`;
+    if (!textarea) {
+      setTemplateText((prev) => (prev ? `${prev}${insertion}` : insertion));
+      return;
+    }
+
+    const start = textarea.selectionStart ?? templateText.length;
+    const end = textarea.selectionEnd ?? templateText.length;
+    const newValue =
+      templateText.slice(0, start) + insertion + templateText.slice(end);
+    setTemplateText(newValue);
+
+    requestAnimationFrame(() => {
+      const cursor = start + insertion.length;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  };
 
   const handleCopyPreview = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -605,10 +576,51 @@ export default function Home() {
             onTabClick={setActiveTab}
           />
           {activeTab === "編集" ? (
-            <TemplateEditor
-              value={templateText}
-              onChange={(value) => setTemplateText(value)}
-            />
+            <div>
+              <TemplateEditor
+                ref={templateEditorRef}
+                value={templateText}
+                onChange={(value) => setTemplateText(value)}
+              />
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-700">
+                    置換できる変数
+                  </h3>
+                  <button
+                    type="button"
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() =>
+                      setShowTemplateVariables((prev) => !prev)
+                    }
+                  >
+                    {showTemplateVariables ? "閉じる" : "開く"}
+                  </button>
+                </div>
+                {showTemplateVariables && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {templateVariableList.map((variable) => (
+                      <button
+                        type="button"
+                        key={variable.key}
+                        className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded hover:bg-gray-200 text-left"
+                        title={variable.description}
+                        onClick={() =>
+                          handleInsertTemplateVariable(variable.key)
+                        }
+                      >
+                        <span className="block font-semibold">
+                          {variable.key}
+                        </span>
+                        <span className="block text-gray-500">
+                          {variable.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="mb-4 p-4 border rounded bg-gray-100 relative group">
               <p className="text-gray-700 whitespace-pre-wrap">{previewText}</p>

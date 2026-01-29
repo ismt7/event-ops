@@ -5,6 +5,7 @@ import React, {
   MouseEvent,
   useRef,
   useEffect,
+  useImperativeHandle,
 } from "react";
 
 interface TemplateEditorProps {
@@ -30,7 +31,10 @@ const suggestions: Suggestion[] = [
   { key: "{eventDate}", description: "イベント開始日" },
 ];
 
-const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
+const TemplateEditor = React.forwardRef<
+  HTMLTextAreaElement,
+  TemplateEditorProps
+>(({ value, onChange }, ref) => {
   const [filteredSuggestions, setFilteredSuggestions] = useState<Suggestion[]>(
     []
   );
@@ -39,6 +43,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const suggestionListRef = useRef<HTMLUListElement>(null);
+
+  useImperativeHandle(ref, () => textareaRef.current as HTMLTextAreaElement, []);
 
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const inputValue = e.target.value;
@@ -191,6 +197,8 @@ const TemplateEditor: React.FC<TemplateEditorProps> = ({ value, onChange }) => {
       )}
     </div>
   );
-};
+});
+
+TemplateEditor.displayName = "TemplateEditor";
 
 export default TemplateEditor;
