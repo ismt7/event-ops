@@ -46,32 +46,6 @@ const validateUrl = (url: string, domain: string) => {
   }
 };
 
-interface TabProps {
-  tabs: string[];
-  activeTab: string;
-  onTabClick: (tab: string) => void;
-}
-
-const Tabs: React.FC<TabProps> = ({ tabs, activeTab, onTabClick }) => (
-  <div className="mb-4">
-    <div className="flex border-b">
-      {tabs.map((tab) => (
-        <button
-          key={tab}
-          className={`py-2 px-4 ${
-            activeTab === tab
-              ? "border-b-2 border-blue-500 text-blue-500"
-              : "text-gray-500"
-          }`}
-          onClick={() => onTabClick(tab)}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
 type State = AppState;
 
 const initReducerState = (base: State): State => {
@@ -103,7 +77,6 @@ export default function Home() {
     selectedTemplateId,
     templateText,
     templateName,
-    activeTab,
     links,
     isModalOpen,
     newLinkName,
@@ -687,15 +660,9 @@ export default function Home() {
               })
             }
           />
-          <Tabs
-            tabs={["編集", "プレビュー"]}
-            activeTab={activeTab}
-            onTabClick={(tab) =>
-              dispatch({ type: "SET_FIELD", field: "activeTab", value: tab })
-            }
-          />
-          {activeTab === "編集" ? (
-            <div>
+          <div className="mt-2 flex flex-col gap-4 md:flex-row">
+            <div className="w-full md:w-1/2">
+              <h3 className="text-sm font-bold text-gray-700 mb-2">編集</h3>
               <TemplateEditor
                 ref={templateEditorRef}
                 value={templateText}
@@ -709,9 +676,9 @@ export default function Home() {
               />
               <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-700">
+                  <h4 className="text-sm font-bold text-gray-700">
                     置換できる変数
-                  </h3>
+                  </h4>
                   <button
                     type="button"
                     className="text-xs text-gray-500 hover:text-gray-700"
@@ -750,18 +717,24 @@ export default function Home() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="mb-4 p-4 border rounded bg-gray-100 relative group">
-              <p className="text-gray-700 whitespace-pre-wrap">{previewText}</p>
-              <button
-                onClick={handleCopyPreview}
-                className="absolute right-0 top-0 mt-2 mr-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              >
-                コピー
-              </button>
+            <div className="w-full md:w-1/2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold text-gray-700">プレビュー</h3>
+                <button
+                  onClick={handleCopyPreview}
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline transition-opacity duration-300"
+                >
+                  コピー
+                </button>
+              </div>
+              <div className="p-4 border rounded bg-gray-100">
+                <p className="text-gray-700 whitespace-pre-wrap">
+                  {previewText}
+                </p>
+              </div>
             </div>
-          )}
-          <div className="flex items-center justify-between">
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleTemplateSave}
