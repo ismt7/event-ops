@@ -19,11 +19,16 @@ interface Question {
 
 export default function EventReportPage() {
   const [reportTitle, setReportTitle] = useState("");
+  const [homeEventTitle, setHomeEventTitle] = useState("");
   const [leadText, setLeadText] = useState("");
   const [seminarVideoUrl, setSeminarVideoUrl] = useState("");
   const [presentationUrl, setPresentationUrl] = useState("");
   const [openAiApiKey, setOpenAiApiKey] = useState("");
-  const [openAiPromptInstruction, setOpenAiPromptInstruction] = useState("");
+  const [openAiTitlePromptInstruction, setOpenAiTitlePromptInstruction] =
+    useState("");
+  const [openAiAnswerPromptInstruction, setOpenAiAnswerPromptInstruction] =
+    useState("");
+  const [openAiModel, setOpenAiModel] = useState("gpt-4.1-mini");
   const [questions, setQuestions] = useState<Question[]>([
     { id: uuidv4(), title: "", content: "", answer: "" },
   ]);
@@ -47,9 +52,20 @@ export default function EventReportPage() {
     const savedQuestions = loadFromLocalStorage<Question[]>("questions");
     const savedOpenAiApiKey =
       loadFromLocalStorage<string>("openAiApiKey");
-    const savedOpenAiPromptInstruction = loadFromLocalStorage<string>(
+    const savedTitlePromptInstruction = loadFromLocalStorage<string>(
+      "openAiTitlePromptInstruction"
+    );
+    const savedAnswerPromptInstruction = loadFromLocalStorage<string>(
+      "openAiAnswerPromptInstruction"
+    );
+    const savedLegacyPromptInstruction = loadFromLocalStorage<string>(
       "openAiPromptInstruction"
     );
+    const savedOpenAiModel = loadFromLocalStorage<string>("openAiModel");
+    const savedAppState = loadFromLocalStorage<{ eventTitle?: string }>(
+      "appState"
+    );
+    const savedLegacyEventTitle = loadFromLocalStorage<string>("eventTitle");
 
     if (savedReportTitle) setReportTitle(savedReportTitle);
     if (savedLeadText) setLeadText(savedLeadText);
@@ -57,10 +73,31 @@ export default function EventReportPage() {
     if (savedPresentationUrl) setPresentationUrl(savedPresentationUrl);
     if (savedQuestions) setQuestions(savedQuestions);
     if (savedOpenAiApiKey) setOpenAiApiKey(savedOpenAiApiKey);
-    if (savedOpenAiPromptInstruction) {
-      setOpenAiPromptInstruction(savedOpenAiPromptInstruction);
+    if (savedTitlePromptInstruction) {
+      setOpenAiTitlePromptInstruction(savedTitlePromptInstruction);
+    } else if (savedLegacyPromptInstruction) {
+      setOpenAiTitlePromptInstruction(savedLegacyPromptInstruction);
+    }
+    if (savedAnswerPromptInstruction) {
+      setOpenAiAnswerPromptInstruction(savedAnswerPromptInstruction);
+    } else if (savedLegacyPromptInstruction) {
+      setOpenAiAnswerPromptInstruction(savedLegacyPromptInstruction);
+    }
+    if (savedOpenAiModel) {
+      setOpenAiModel(savedOpenAiModel);
+    }
+    if (savedAppState?.eventTitle) {
+      setHomeEventTitle(savedAppState.eventTitle);
+    } else if (savedLegacyEventTitle) {
+      setHomeEventTitle(savedLegacyEventTitle);
     }
   }, []);
+
+  const resolveReportTitle = (value: string) => {
+    if (!value) return "";
+    if (!homeEventTitle) return value;
+    return value.replaceAll("{title}", homeEventTitle);
+  };
 
   const handleSave = () => {
     saveToLocalStorage("reportTitle", reportTitle);
@@ -97,14 +134,18 @@ export default function EventReportPage() {
     setActiveQuestionId(newId);
   };
 
-  const requestChatGpt = async (prompt: string) => {
-    const fullPrompt = openAiPromptInstruction
-      ? `${prompt}\n\n追加指示:\n${openAiPromptInstruction}`
+  const requestChatGpt = async (prompt: string, instruction?: string) => {
+    const fullPrompt = instruction
+      ? `${prompt}\n\n追加指示:\n${instruction}`
       : prompt;
     const response = await fetch("/api/chatgpt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: openAiApiKey, prompt: fullPrompt }),
+      body: JSON.stringify({
+        apiKey: openAiApiKey,
+        prompt: fullPrompt,
+        model: openAiModel,
+      }),
     });
 
     const data = (await response.json().catch(() => ({}))) as {
@@ -142,7 +183,9 @@ export default function EventReportPage() {
 
     try {
       const prompt = `次の質問内容から、イベントレポートのQ&A見出しを日本語で簡潔に1行で作成してください。\n\n質問内容:\n${question.content}\n\n既存の見出し:\n${question.title || "未設定"}`;
-      const text = (await requestChatGpt(prompt)).trim();
+      const text = (
+        await requestChatGpt(prompt, openAiTitlePromptInstruction)
+      ).trim();
       if (text) {
         setQuestions((prev) =>
           prev.map((q) => (q.id === id ? { ...q, title: text } : q))
@@ -173,8 +216,11 @@ export default function EventReportPage() {
     setGeneratingAnswerIds((prev) => ({ ...prev, [id]: true }));
 
     try {
-      const prompt = `次の質問に対するイベントレポート向けの回答を、日本語で簡潔にまとめてください。\n\nレポートタイトル:\n${reportTitle || "未設定"}\n\n質問:\n${question.content}\n\n既存の回答:\n${question.answer || "未設定"}`;
-      const text = (await requestChatGpt(prompt)).trim();
+      const resolvedReportTitle = resolveReportTitle(reportTitle);
+      const prompt = `次の質問に対するイベントレポート向けの回答を、日本語で簡潔にまとめてください。\n\nレポートタイトル:\n${resolvedReportTitle || "未設定"}\n\n質問:\n${question.content}\n\n既存の回答:\n${question.answer || "未設定"}`;
+      const text = (
+        await requestChatGpt(prompt, openAiAnswerPromptInstruction)
+      ).trim();
       if (text) {
         setQuestions((prev) =>
           prev.map((q) => (q.id === id ? { ...q, answer: text } : q))
@@ -324,7 +370,10 @@ export default function EventReportPage() {
           <div className="w-1/2">
             <button
               onClick={() => {
-                const markdownContent = `# ${reportTitle || "タイトル未設定"}
+                const resolvedReportTitle = resolveReportTitle(reportTitle);
+                const markdownContent = `# ${
+                  resolvedReportTitle || "タイトル未設定"
+                }
 
 ${leadText || "リード文未設定"}
 
@@ -348,7 +397,7 @@ ${questions
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `${reportTitle || "レポート"}.md`;
+                a.download = `${resolvedReportTitle || "レポート"}.md`;
                 a.click();
                 URL.revokeObjectURL(url);
               }}
@@ -358,9 +407,9 @@ ${questions
             </button>
             <div className="bg-gray-50 p-6 rounded-lg border border-gray-300">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                {reportTitle || <></>}
+                {resolveReportTitle(reportTitle) || <></>}
               </h2>
-              {!reportTitle && (
+              {!resolveReportTitle(reportTitle) && (
                 <div className="h-6 bg-gray-300 rounded animate-pulse"></div>
               )}
               {leadText ? (

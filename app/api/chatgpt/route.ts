@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 type ChatRequest = {
   apiKey?: string;
   prompt?: string;
+  model?: string;
 };
 
 export async function POST(request: Request) {
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
 
   const apiKey = payload?.apiKey?.trim();
   const prompt = payload?.prompt?.trim();
+  const model = payload?.model?.trim() || "gpt-4.1-mini";
 
   if (!apiKey || !prompt) {
     return NextResponse.json(
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4.1-mini",
+      model,
       messages: [
         {
           role: "system",
