@@ -40,6 +40,13 @@ export interface AppState {
   urlTouched: Partial<Record<UrlField, boolean>>;
 }
 
+export type StorageLike = {
+  getItem<T>(key: string): T | null;
+  setItem<T>(key: string, value: T): void;
+  removeItem(key: string): void;
+  clear(): void;
+};
+
 export type EventData = Pick<
   AppState,
   | "zoomUrl"
@@ -129,7 +136,7 @@ export const createDefaultState = (
   urlTouched: {},
 });
 
-export const initState = (base: AppState, storage: Storage): AppState => {
+export const initState = (base: AppState, storage: StorageLike): AppState => {
   const persisted = storage.getItem<PersistedState>("appState");
   if (persisted) {
     return { ...base, ...persisted };
@@ -166,11 +173,11 @@ const createPersistedState = (state: AppState): PersistedState => ({
   links: state.links,
 });
 
-export const persistAppState = (storage: Storage, state: AppState) => {
+export const persistAppState = (storage: StorageLike, state: AppState) => {
   storage.setItem("appState", createPersistedState(state));
 };
 
-export const migrateLegacyState = (storage: Storage, state: AppState) => {
+export const migrateLegacyState = (storage: StorageLike, state: AppState) => {
   const hasLegacyData = LEGACY_STORAGE_KEYS.some(
     (key) => storage.getItem<unknown>(key) !== null
   );

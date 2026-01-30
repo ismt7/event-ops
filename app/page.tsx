@@ -59,6 +59,7 @@ export default function Home() {
   );
   const [message, setMessage] = useState("");
   const templateEditorRef = useRef<HTMLTextAreaElement>(null);
+  const didMigrateRef = useRef(false);
 
 
   const {
@@ -103,8 +104,10 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (didMigrateRef.current) return;
+    didMigrateRef.current = true;
     migrateLegacyState(storage, state);
-  }, []);
+  }, [state]);
 
   const handleUrlChange =
     (field: UrlField, domain: string) =>
