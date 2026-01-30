@@ -191,7 +191,7 @@ export default function EventReportPage() {
           prev.map((q) => (q.id === id ? { ...q, title: text } : q))
         );
       }
-    } catch (error) {
+    } catch {
       setChatGptError("ChatGPTの呼び出しに失敗しました。");
     } finally {
       setGeneratingTitleIds((prev) => ({ ...prev, [id]: false }));
@@ -226,7 +226,7 @@ export default function EventReportPage() {
           prev.map((q) => (q.id === id ? { ...q, answer: text } : q))
         );
       }
-    } catch (error) {
+    } catch {
       setChatGptError("ChatGPTの呼び出しに失敗しました。");
     } finally {
       setGeneratingAnswerIds((prev) => ({ ...prev, [id]: false }));

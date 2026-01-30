@@ -114,7 +114,7 @@ export default function Settings() {
       const list = Array.isArray(data.models) ? data.models : [];
       setOpenAiModels(list);
       storage.setItem("openAiModels", list);
-    } catch (error) {
+    } catch {
       setModelsError("モデル一覧の取得に失敗しました。");
     } finally {
       setModelsLoading(false);
