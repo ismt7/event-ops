@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useEffect, ChangeEvent, MouseEvent } from "react";
+import {
+  useState,
+  useRef,
+  useReducer,
+  useEffect,
+  useMemo,
+  ChangeEvent,
+  MouseEvent,
+} from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ja";
 import defaultConfig from "@/event-ops.config";
@@ -13,6 +21,19 @@ import ReadOnlyPasscode from "@/app/components/ReadOnlyPasscode";
 import TemplateEditor from "@/app/components/TemplateEditor";
 import { saveAs } from "file-saver";
 import { storage } from "@/lib/storage";
+import {
+  createDefaultState,
+  appReducer,
+  initState,
+  migrateLegacyState,
+  persistAppState,
+  AppState,
+  UrlField,
+  ShortUrlType,
+  SHORT_URL_TYPES,
+  buildShortUrl,
+  buildEventCode,
+} from "@/lib/appState";
 import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 dayjs.locale("ja");
 
@@ -25,192 +46,121 @@ const validateUrl = (url: string, domain: string) => {
   }
 };
 
-const handleUrlChange =
-  (setUrl: React.Dispatch<React.SetStateAction<string>>, domain: string) =>
-  (e: ChangeEvent<HTMLInputElement>) => {
-    const url = e.target.value;
-    setUrl(url);
-    validateUrl(url, domain); // バリデーションは実行するが結果は利用しない
-  };
+type State = AppState;
 
-interface TabProps {
-  tabs: string[];
-  activeTab: string;
-  onTabClick: (tab: string) => void;
-}
-
-const Tabs: React.FC<TabProps> = ({ tabs, activeTab, onTabClick }) => (
-  <div className="mb-4">
-    <div className="flex border-b">
-      {tabs.map((tab) => (
-        <button
-          key={tab}
-          className={`py-2 px-4 ${
-            activeTab === tab
-              ? "border-b-2 border-blue-500 text-blue-500"
-              : "text-gray-500"
-          }`}
-          onClick={() => onTabClick(tab)}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
-interface Template {
-  id: string;
-  name: string;
-  text: string;
-}
-
-interface Link {
-  id: string;
-  name: string;
-  url: string;
-}
+const initReducerState = (base: State): State => {
+  if (typeof window === "undefined") return base;
+  return initState(base, storage);
+};
 
 export default function Home() {
-  const [config, setConfig] = useState(defaultConfig);
-  const [zoomUrl, setZoomUrl] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [surveyUrl, setSurveyUrl] = useState("");
-  const [slidoUrl, setSlidoUrl] = useState("");
-  const [connpassUrl, setConnpassUrl] = useState("");
-  const [eventDate, setEventDate] = useState(dayjs().format("YYYY-MM-DD"));
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventDescription, setEventDescription] = useState("");
-  const [message, setMessage] = useState("");
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null
+  const [state, dispatch] = useReducer(appReducer, defaultConfig, (config) =>
+    initReducerState(createDefaultState(config))
   );
-  const [templateText, setTemplateText] = useState("");
-  const [templateName, setTemplateName] = useState("");
-  const [activeTab, setActiveTab] = useState("編集");
-  const [links, setLinks] = useState<Link[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newLinkName, setNewLinkName] = useState("");
-  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const templateEditorRef = useRef<HTMLTextAreaElement>(null);
+
+
+  const {
+    config,
+    zoomUrl,
+    youtubeUrl,
+    surveyUrl,
+    slidoUrl,
+    connpassUrl,
+    urlErrors,
+    urlTouched,
+    eventDate,
+    eventTitle,
+    eventDescription,
+    templates,
+    selectedTemplateId,
+    templateText,
+    templateName,
+    links,
+    isModalOpen,
+    newLinkName,
+    newLinkUrl,
+    showTemplateVariables,
+  } = state;
 
   useEffect(() => {
-    // 初回起動時にdefaultConfigをstorageに保存
-    const storedConfig = storage.getItem<typeof config>("config");
-    if (!storedConfig) {
-      storage.setItem("config", defaultConfig);
-    } else {
-      setConfig(storedConfig); // ローカルストレージから読み込んだconfigをセット
-    }
+    persistAppState(storage, state);
+  }, [
+    config,
+    zoomUrl,
+    youtubeUrl,
+    surveyUrl,
+    slidoUrl,
+    connpassUrl,
+    eventDate,
+    eventTitle,
+    eventDescription,
+    templates,
+    links,
+    state,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    migrateLegacyState(storage, state);
   }, []);
 
-  useEffect(() => {
-    const storedZoomUrl = storage.getItem<string>("zoomUrl");
-    const storedYoutubeUrl = storage.getItem<string>("youtubeUrl");
-    const storedSurveyUrl = storage.getItem<string>("surveyUrl");
-    const storedSlidoUrl = storage.getItem<string>("slidoUrl");
-    const storedConnpassUrl = storage.getItem<string>("connpassUrl");
-    const storedEventDate = storage.getItem<string>("eventDate");
-    const storedEventTitle = storage.getItem<string>("eventTitle");
-    const storedEventDescription = storage.getItem<string>("eventDescription");
-    const storedTemplates = storage.getItem<Template[]>("templates");
-    const storedLinks = storage.getItem<Link[]>("links");
+  const handleUrlChange =
+    (field: UrlField, domain: string) =>
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const url = e.target.value;
+      dispatch({ type: "SET_FIELD", field, value: url });
+      const isValid = url === "" || validateUrl(url, domain);
+      const error = isValid ? "" : `${domain} のURLを入力してください。`;
+      dispatch({ type: "SET_URL_ERROR", field, value: error });
+    };
 
-    if (storedZoomUrl) setZoomUrl(storedZoomUrl);
-    if (storedYoutubeUrl) setYoutubeUrl(storedYoutubeUrl);
-    if (storedSurveyUrl) setSurveyUrl(storedSurveyUrl);
-    if (storedSlidoUrl) setSlidoUrl(storedSlidoUrl);
-    if (storedConnpassUrl) setConnpassUrl(storedConnpassUrl);
-    if (storedEventDate) setEventDate(storedEventDate);
-    if (storedEventTitle) setEventTitle(storedEventTitle);
-    if (storedEventDescription) setEventDescription(storedEventDescription);
-    if (storedTemplates) setTemplates(storedTemplates);
-    if (storedLinks) setLinks(storedLinks);
-  }, []);
-
-  useEffect(() => {
-    storage.setItem("zoomUrl", zoomUrl);
-  }, [zoomUrl]);
-
-  useEffect(() => {
-    storage.setItem("youtubeUrl", youtubeUrl);
-  }, [youtubeUrl]);
-
-  useEffect(() => {
-    storage.setItem("surveyUrl", surveyUrl);
-  }, [surveyUrl]);
-
-  useEffect(() => {
-    storage.setItem("slidoUrl", slidoUrl);
-  }, [slidoUrl]);
-
-  useEffect(() => {
-    storage.setItem("connpassUrl", connpassUrl);
-  }, [connpassUrl]);
-
-  useEffect(() => {
-    storage.setItem("eventDate", eventDate);
-  }, [eventDate]);
-
-  useEffect(() => {
-    storage.setItem("eventTitle", eventTitle);
-  }, [eventTitle]);
-
-  useEffect(() => {
-    storage.setItem("eventDescription", eventDescription);
-  }, [eventDescription]);
-
-  useEffect(() => {
-    storage.setItem("templates", templates);
-  }, [templates]);
-
-  useEffect(() => {
-    storage.setItem("links", links);
-  }, [links]);
+  const handleUrlBlur =
+    (field: UrlField) => (e: ChangeEvent<HTMLInputElement>) => {
+      if (e.target.value === "") return;
+      dispatch({ type: "SET_URL_TOUCHED", field, value: true });
+    };
 
   const handleClear = () => {
     storage.clear();
-    setZoomUrl("");
-    setYoutubeUrl("");
-    setSurveyUrl("");
-    setSlidoUrl("");
-    setConnpassUrl("");
-    setEventDate(dayjs().format("YYYY-MM-DD"));
-    setEventTitle("");
-    setEventDescription("");
-    setTemplateText("");
-    setLinks([]);
+    dispatch({ type: "RESET", value: createDefaultState(defaultConfig) });
     setMessage("ローカルストレージをクリアしました！");
     setTimeout(() => setMessage(""), 3000);
   };
 
   const handleTemplateChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const templateId = e.target.value;
-    setSelectedTemplateId(templateId);
     const selectedTemplate = templates.find(
       (template) => template.id === templateId
     );
-    setTemplateText(selectedTemplate ? selectedTemplate.text : "");
-    setTemplateName(selectedTemplate ? selectedTemplate.name : "");
+    dispatch({
+        type: "SELECT_TEMPLATE",
+        value: {
+          id: templateId,
+          name: selectedTemplate ? selectedTemplate.name : "",
+          text: selectedTemplate ? selectedTemplate.text : "",
+        },
+      });
   };
 
   const handleTemplateSave = () => {
     if (selectedTemplateId) {
-      setTemplates((prevTemplates) =>
-        prevTemplates.map((template) =>
-          template.id === selectedTemplateId
-            ? { ...template, name: templateName, text: templateText }
-            : template
-        )
-      );
+      dispatch({
+        type: "UPDATE_TEMPLATE",
+        value: {
+          id: selectedTemplateId,
+          name: templateName,
+          text: templateText,
+        },
+      });
     } else {
       const newTemplate = {
         id: dayjs().format("YYYYMMDDHHmmss"),
         name: templateName,
         text: templateText,
       };
-      setTemplates((prevTemplates) => [...prevTemplates, newTemplate]);
-      setSelectedTemplateId(newTemplate.id);
+      dispatch({ type: "ADD_TEMPLATE", value: newTemplate });
     }
     setMessage("テンプレートが保存されました！");
     setTimeout(() => setMessage(""), 3000);
@@ -218,12 +168,10 @@ export default function Home() {
 
   const handleTemplateDelete = () => {
     if (selectedTemplateId) {
-      setTemplates((prevTemplates) =>
-        prevTemplates.filter((template) => template.id !== selectedTemplateId)
-      );
-      setSelectedTemplateId(null);
-      setTemplateText("");
-      setTemplateName("");
+      dispatch({
+        type: "DELETE_TEMPLATE",
+        value: { id: selectedTemplateId },
+      });
       setMessage("テンプレートが削除されました！");
       setTimeout(() => setMessage(""), 3000);
     }
@@ -236,20 +184,16 @@ export default function Home() {
         name: newLinkName,
         url: newLinkUrl,
       };
-      setLinks((prevLinks) => [...prevLinks, newLink]);
-      setNewLinkName("");
-      setNewLinkUrl("");
-      setIsModalOpen(false);
+      dispatch({ type: "ADD_LINK", value: newLink });
     }
   };
 
   const handleDeleteLink = (id: string) => {
-    setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
+    dispatch({ type: "REMOVE_LINK", value: { id } });
   };
 
   const handleExport = () => {
-    const storedConfig = storage.getItem<typeof config>("config");
-    const currentConfig = storedConfig || defaultConfig;
+    const currentConfig = config || defaultConfig;
 
     const data = {
       config: currentConfig,
@@ -297,37 +241,22 @@ export default function Home() {
           prefix: importedData.config?.prefix || defaultConfig.prefix,
         };
 
-        setConfig(newConfig);
-        storage.setItem("config", newConfig);
-
-        setZoomUrl(importedData.zoomUrl || "");
-        setYoutubeUrl(importedData.youtubeUrl || "");
-        setSurveyUrl(importedData.surveyUrl || "");
-        setSlidoUrl(importedData.slidoUrl || "");
-        setConnpassUrl(importedData.connpassUrl || "");
-        setEventDate(importedData.eventDate || dayjs().format("YYYY-MM-DD"));
-        setEventTitle(importedData.eventTitle || "");
-        setEventDescription(importedData.eventDescription || "");
-        setTemplates(importedData.templates || []);
-        setLinks(importedData.links || []);
-
-        // 他の値もローカルストレージを更新
-        storage.setItem("zoomUrl", importedData.zoomUrl || "");
-        storage.setItem("youtubeUrl", importedData.youtubeUrl || "");
-        storage.setItem("surveyUrl", importedData.surveyUrl || "");
-        storage.setItem("slidoUrl", importedData.slidoUrl || "");
-        storage.setItem("connpassUrl", importedData.connpassUrl || "");
-        storage.setItem(
-          "eventDate",
-          importedData.eventDate || dayjs().format("YYYY-MM-DD")
-        );
-        storage.setItem("eventTitle", importedData.eventTitle || "");
-        storage.setItem(
-          "eventDescription",
-          importedData.eventDescription || ""
-        );
-        storage.setItem("templates", importedData.templates || []);
-        storage.setItem("links", importedData.links || []);
+        dispatch({ type: "IMPORT_CONFIG", value: { config: newConfig } });
+        dispatch({
+          type: "IMPORT_EVENT_DATA",
+          value: {
+            zoomUrl: importedData.zoomUrl || "",
+            youtubeUrl: importedData.youtubeUrl || "",
+            surveyUrl: importedData.surveyUrl || "",
+            slidoUrl: importedData.slidoUrl || "",
+            connpassUrl: importedData.connpassUrl || "",
+            eventDate: importedData.eventDate || dayjs().format("YYYY-MM-DD"),
+            eventTitle: importedData.eventTitle || "",
+            eventDescription: importedData.eventDescription || "",
+            templates: importedData.templates || [],
+            links: importedData.links || [],
+          },
+        });
 
         setMessage("JSONファイルをインポートしました！");
         setTimeout(() => setMessage(""), 3000);
@@ -338,29 +267,103 @@ export default function Home() {
     reader.readAsText(file);
   };
 
-  const formattedDate = dayjs(eventDate).format("YYYYMM");
-  const formattedZoomUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-zoom`;
-  const formattedYoutubeUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-youtube`;
-  const formattedSurveyUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-survey`;
-  const formattedSlidoUrl = `${config.shortUrl.baseUrl}/${config.prefix || defaultConfig.prefix}${formattedDate}-slido`;
-  const formattedZoomPasscode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
-  const formattedSlidoEventCode = `${config.prefix || defaultConfig.prefix}${formattedDate.slice(2)}`;
+  const { shortUrlsByType, buildCode } = useMemo(() => {
+    const date = dayjs(eventDate).format("YYYYMM");
+    const basePrefix = config.prefix || defaultConfig.prefix;
+    const shortUrlsByType = SHORT_URL_TYPES.reduce(
+      (acc, type) => {
+        acc[type] = buildShortUrl({
+          baseUrl: config.shortUrl.baseUrl,
+          prefix: basePrefix,
+          date,
+          type,
+        });
+        return acc;
+      },
+      {} as Record<ShortUrlType, string>
+    );
+    return {
+      shortUrlsByType,
+      buildCode: () => buildEventCode({ prefix: basePrefix, date }),
+    };
+  }, [eventDate, config.shortUrl.baseUrl, config.prefix]);
+
+  const formattedZoomUrl = shortUrlsByType.zoom;
+  const formattedYoutubeUrl = shortUrlsByType.youtube;
+  const formattedSurveyUrl = shortUrlsByType.survey;
+  const formattedSlidoUrl = shortUrlsByType.slido;
+  const formattedZoomPasscode = buildCode();
+  const formattedSlidoEventCode = buildCode();
 
   const formatEventDate = (date: string) => {
     return dayjs(date).format("YYYY年MM月DD日(ddd)");
   };
 
-  const previewText = templateText
-    .replace("{zoomUrl}", formattedZoomUrl)
-    .replace("{youtubeUrl}", formattedYoutubeUrl)
-    .replace("{surveyUrl}", formattedSurveyUrl)
-    .replace("{slidoUrl}", formattedSlidoUrl)
-    .replace("{connpassUrl}", connpassUrl)
-    .replace("{zoomPasscode}", formattedZoomPasscode)
-    .replace("{slidoEventCode}", formattedSlidoEventCode)
-    .replace("{eventTitle}", eventTitle)
-    .replace("{eventDescription}", eventDescription)
-    .replace("{eventDate}", formatEventDate(eventDate));
+  const templateVariables = {
+    "{zoomUrl}": formattedZoomUrl,
+    "{youtubeUrl}": formattedYoutubeUrl,
+    "{surveyUrl}": formattedSurveyUrl,
+    "{slidoUrl}": formattedSlidoUrl,
+    "{connpassUrl}": connpassUrl,
+    "{zoomPasscode}": formattedZoomPasscode,
+    "{slidoEventCode}": formattedSlidoEventCode,
+    "{eventTitle}": eventTitle,
+    "{eventDescription}": eventDescription,
+    "{eventDate}": formatEventDate(eventDate),
+  };
+  const templateVariableList = [
+    { key: "{zoomUrl}", description: "ZoomのURL" },
+    { key: "{youtubeUrl}", description: "YouTubeのURL" },
+    { key: "{surveyUrl}", description: "アンケートのURL" },
+    { key: "{slidoUrl}", description: "SlidoのURL" },
+    { key: "{connpassUrl}", description: "connpassのURL" },
+    { key: "{zoomPasscode}", description: "Zoomのパスコード" },
+    { key: "{slidoEventCode}", description: "Slidoのイベントコード" },
+    { key: "{eventTitle}", description: "イベントタイトル" },
+    { key: "{eventDescription}", description: "イベント概要" },
+    { key: "{eventDate}", description: "イベント開始日" },
+  ];
+
+  const previewText = Object.entries(templateVariables).reduce(
+    (text, [key, value]) => text.replaceAll(key, value),
+    templateText
+  );
+
+  const handleInsertTemplateVariable = (variable: string) => {
+    const textarea = templateEditorRef.current;
+    const needsSpaceBefore =
+      templateText.length > 0 &&
+      !/\s$/.test(
+        templateText.slice(0, textarea?.selectionStart ?? templateText.length)
+      );
+    const needsSpaceAfter =
+      !!textarea &&
+      textarea.selectionEnd < templateText.length &&
+      !/^\s/.test(templateText.slice(textarea.selectionEnd));
+    const prefix = needsSpaceBefore ? " " : "";
+    const suffix = needsSpaceAfter ? " " : "";
+    const insertion = `${prefix}${variable}${suffix}`;
+    if (!textarea) {
+      dispatch({
+        type: "SET_FIELD",
+        field: "templateText",
+        value: templateText ? `${templateText}${insertion}` : insertion,
+      });
+      return;
+    }
+
+    const start = textarea.selectionStart ?? templateText.length;
+    const end = textarea.selectionEnd ?? templateText.length;
+    const newValue =
+      templateText.slice(0, start) + insertion + templateText.slice(end);
+    dispatch({ type: "SET_FIELD", field: "templateText", value: newValue });
+
+    requestAnimationFrame(() => {
+      const cursor = start + insertion.length;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  };
 
   const handleCopyPreview = (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -397,7 +400,13 @@ export default function Home() {
               </div>
             ))}
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "isModalOpen",
+                  value: true,
+                })
+              }
               className="flex items-center justify-center p-4 border-2 border-dashed rounded text-gray-500 hover:text-gray-700 hover:border-gray-700"
             >
               <PlusCircleIcon className="h-6 w-6 mr-2" />
@@ -416,7 +425,13 @@ export default function Home() {
                   label="リンク名"
                   id="linkName"
                   value={newLinkName}
-                  onChange={(e) => setNewLinkName(e.target.value)}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "newLinkName",
+                      value: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="mb-4">
@@ -424,12 +439,24 @@ export default function Home() {
                   label="リンクURL"
                   id="linkUrl"
                   value={newLinkUrl}
-                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "newLinkUrl",
+                      value: e.target.value,
+                    })
+                  }
                 />
               </div>
               <div className="flex justify-end">
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() =>
+                    dispatch({
+                      type: "SET_FIELD",
+                      field: "isModalOpen",
+                      value: false,
+                    })
+                  }
                   className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mr-2"
                 >
                   キャンセル
@@ -462,19 +489,37 @@ export default function Home() {
               label="イベントタイトル"
               id="eventTitle"
               value={eventTitle}
-              onChange={(e) => setEventTitle(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventTitle",
+                  value: e.target.value,
+                })
+              }
             />
             <TextAreaForm
               label="イベント概要"
               id="eventDescription"
               value={eventDescription}
-              onChange={(e) => setEventDescription(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventDescription",
+                  value: e.target.value,
+                })
+              }
             />
             <DateForm
               label="イベント開始日"
               id="eventDate"
               value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "eventDate",
+                  value: e.target.value,
+                })
+              }
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -482,34 +527,44 @@ export default function Home() {
               label="Zoom URL"
               id="zoomUrl"
               value={zoomUrl}
-              onChange={handleUrlChange(setZoomUrl, "us06web.zoom.us")}
+              onChange={handleUrlChange("zoomUrl", "us06web.zoom.us")}
+              onBlur={handleUrlBlur("zoomUrl")}
+              error={urlTouched.zoomUrl ? urlErrors.zoomUrl : ""}
             />
             <UrlForm
               label="YouTube URL"
               id="youtubeUrl"
               value={youtubeUrl}
-              onChange={handleUrlChange(setYoutubeUrl, "www.youtube.com")}
+              onChange={handleUrlChange("youtubeUrl", "www.youtube.com")}
+              onBlur={handleUrlBlur("youtubeUrl")}
+              error={urlTouched.youtubeUrl ? urlErrors.youtubeUrl : ""}
             />
             <UrlForm
               label="Survey URL"
               id="surveyUrl"
               value={surveyUrl}
-              onChange={handleUrlChange(setSurveyUrl, "docs.google.com")}
+              onChange={handleUrlChange("surveyUrl", "docs.google.com")}
+              onBlur={handleUrlBlur("surveyUrl")}
+              error={urlTouched.surveyUrl ? urlErrors.surveyUrl : ""}
             />
             <UrlForm
               label="Slido URL"
               id="slidoUrl"
               value={slidoUrl}
-              onChange={handleUrlChange(setSlidoUrl, "app.sli.do")}
+              onChange={handleUrlChange("slidoUrl", "app.sli.do")}
+              onBlur={handleUrlBlur("slidoUrl")}
+              error={urlTouched.slidoUrl ? urlErrors.slidoUrl : ""}
             />
             <UrlForm
               label="connpass URL"
               id="connpassUrl"
               value={connpassUrl}
               onChange={handleUrlChange(
-                setConnpassUrl,
+                "connpassUrl",
                 config.connpass.baseUrl
               )}
+              onBlur={handleUrlBlur("connpassUrl")}
+              error={urlTouched.connpassUrl ? urlErrors.connpassUrl : ""}
             />
           </div>
           <div className="bg-gray-50 shadow-inner rounded-lg p-6 mt-8">
@@ -597,30 +652,89 @@ export default function Home() {
             label="テンプレート名"
             id="templateName"
             value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
+            onChange={(e) =>
+              dispatch({
+                type: "SET_FIELD",
+                field: "templateName",
+                value: e.target.value,
+              })
+            }
           />
-          <Tabs
-            tabs={["編集", "プレビュー"]}
-            activeTab={activeTab}
-            onTabClick={setActiveTab}
-          />
-          {activeTab === "編集" ? (
-            <TemplateEditor
-              value={templateText}
-              onChange={(value) => setTemplateText(value)}
-            />
-          ) : (
-            <div className="mb-4 p-4 border rounded bg-gray-100 relative group">
-              <p className="text-gray-700 whitespace-pre-wrap">{previewText}</p>
-              <button
-                onClick={handleCopyPreview}
-                className="absolute right-0 top-0 mt-2 mr-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              >
-                コピー
-              </button>
+          <div className="mt-2 flex flex-col gap-4 md:flex-row">
+            <div className="w-full md:w-1/2">
+              <h3 className="text-sm font-bold text-gray-700 mb-2">編集</h3>
+              <TemplateEditor
+                ref={templateEditorRef}
+                value={templateText}
+                onChange={(value) =>
+                  dispatch({
+                    type: "SET_FIELD",
+                    field: "templateText",
+                    value,
+                  })
+                }
+              />
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-gray-700">
+                    置換できる変数
+                  </h4>
+                  <button
+                    type="button"
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                    onClick={() =>
+                      dispatch({
+                        type: "SET_FIELD",
+                        field: "showTemplateVariables",
+                        value: !showTemplateVariables,
+                      })
+                    }
+                  >
+                    {showTemplateVariables ? "閉じる" : "開く"}
+                  </button>
+                </div>
+                {showTemplateVariables && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {templateVariableList.map((variable) => (
+                      <button
+                        type="button"
+                        key={variable.key}
+                        className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded hover:bg-gray-200 text-left"
+                        title={variable.description}
+                        onClick={() =>
+                          handleInsertTemplateVariable(variable.key)
+                        }
+                      >
+                        <span className="block font-semibold">
+                          {variable.key}
+                        </span>
+                        <span className="block text-gray-500">
+                          {variable.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="flex items-center justify-between">
+            <div className="w-full md:w-1/2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold text-gray-700">プレビュー</h3>
+                <button
+                  onClick={handleCopyPreview}
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline transition-opacity duration-300"
+                >
+                  コピー
+                </button>
+              </div>
+              <div className="p-4 border rounded bg-gray-100">
+                <p className="text-gray-700 whitespace-pre-wrap">
+                  {previewText}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleTemplateSave}

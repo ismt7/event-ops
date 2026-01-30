@@ -16,6 +16,11 @@ interface QuestionListProps {
   onAdd: () => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, field: string, value: string) => void;
+  onGenerateTitle?: (id: string) => void;
+  onGenerateAnswer?: (id: string) => void;
+  canUseChatGpt?: boolean;
+  generatingTitleIds?: Record<string, boolean>;
+  generatingAnswerIds?: Record<string, boolean>;
 }
 
 export default function QuestionList({
@@ -25,6 +30,11 @@ export default function QuestionList({
   onAdd,
   onRemove,
   onUpdate,
+  onGenerateTitle,
+  onGenerateAnswer,
+  canUseChatGpt = false,
+  generatingTitleIds = {},
+  generatingAnswerIds = {},
 }: QuestionListProps) {
   return (
     <div>
@@ -43,12 +53,28 @@ export default function QuestionList({
           {activeQuestionId === question.id && (
             <div className="p-6 space-y-4">
               <div>
-                <label
-                  htmlFor={`title-${question.id}`}
-                  className="block text-lg font-medium text-gray-700"
-                >
-                  見出し
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor={`title-${question.id}`}
+                    className="block text-lg font-medium text-gray-700"
+                  >
+                    見出し
+                  </label>
+                  {onGenerateTitle && (
+                    <button
+                      type="button"
+                      onClick={() => onGenerateTitle(question.id)}
+                      className="text-xs px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      disabled={
+                        !canUseChatGpt || generatingTitleIds[question.id]
+                      }
+                    >
+                      {generatingTitleIds[question.id]
+                        ? "生成中..."
+                        : "ChatGPTで生成"}
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   id={`title-${question.id}`}
@@ -79,12 +105,28 @@ export default function QuestionList({
                 />
               </div>
               <div>
-                <label
-                  htmlFor={`answer-${question.id}`}
-                  className="block text-lg font-medium text-gray-700"
-                >
-                  回答
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor={`answer-${question.id}`}
+                    className="block text-lg font-medium text-gray-700"
+                  >
+                    回答
+                  </label>
+                  {onGenerateAnswer && (
+                    <button
+                      type="button"
+                      onClick={() => onGenerateAnswer(question.id)}
+                      className="text-xs px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      disabled={
+                        !canUseChatGpt || generatingAnswerIds[question.id]
+                      }
+                    >
+                      {generatingAnswerIds[question.id]
+                        ? "生成中..."
+                        : "ChatGPTで生成"}
+                    </button>
+                  )}
+                </div>
                 <textarea
                   id={`answer-${question.id}`}
                   rows={2}
